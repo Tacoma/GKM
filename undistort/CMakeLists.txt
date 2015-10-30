@@ -7,6 +7,7 @@ project(undistort)
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   image_transport
+  image_geometry
   sensor_msgs
   std_msgs
   roscpp
