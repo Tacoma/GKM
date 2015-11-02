@@ -15,7 +15,7 @@ class ImageConverter
     image_geometry::PinholeCameraModel cam_model_;
 	
 public:
-	ImageConverter();
+    ImageConverter(int calibration);
 	~ImageConverter();
 	
 	void imageCb(const sensor_msgs::ImageConstPtr& msg);
