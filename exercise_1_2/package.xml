@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>undistort</name>
+  <name>exercise_1_2</name>
   <version>0.0.0</version>
-  <description>The undistort package</description>
+  <description>The exercise_1_2 package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but mutiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/undistort</url> -->
+  <!-- <url type="website">http://wiki.ros.org/exercise_1_2</url> -->
 
 
   <!-- Author tags are optional, mutiple are allowed, one per tag -->

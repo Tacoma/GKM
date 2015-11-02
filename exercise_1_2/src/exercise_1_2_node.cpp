@@ -1,4 +1,4 @@
-#include "undistort_node.h"
+#include "exercise_1_2_node.h"
 
 
 #include <cv_bridge/cv_bridge.h>
@@ -17,7 +17,7 @@ ImageConverter::ImageConverter(int calibration)
 	// Subscrive to input video feed and publish output video feed
     image_sub_ = it_.subscribe("/camera/rgb/image_color", 1,
 		&ImageConverter::imageCb, this);
-    image_pub_ = it_.advertise("/undistort/output_video", 1);
+    image_pub_ = it_.advertise("/exercise_1_2/output_video", 1);
 
 
     // Create camera model
@@ -92,7 +92,7 @@ void ImageConverter::imageCb(const sensor_msgs::ImageConstPtr& msg)
 // entry point
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "undistort");
+    ros::init(argc, argv, "exercise_1_2");
 
     // Argument parsing
     int i = 2;
