@@ -1,5 +1,5 @@
-#ifndef UNDISTORT_NODE_H
-#define UNDISTORT_NODE_H
+#ifndef EXERCISE_1_2_NODE_H
+#define EXERSICE_1_2_NODE_H
 
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
@@ -15,10 +15,10 @@ class ImageConverter
     image_geometry::PinholeCameraModel cam_model_;
 	
 public:
-	ImageConverter();
+    ImageConverter(int calibration);
 	~ImageConverter();
 	
 	void imageCb(const sensor_msgs::ImageConstPtr& msg);
 };
 
-#endif // UNDISTORT_NODE_H
+#endif // EXERSICE_1_2_NODE_H

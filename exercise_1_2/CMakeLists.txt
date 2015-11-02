@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(undistort)
+project(exercise_1_2)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -104,7 +104,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES undistort
+#  LIBRARIES exercise_1_2
 #  CATKIN_DEPENDS cv_bridge image_transport sensor_msgs std_msgs
 #  DEPENDS system_lib
 )
@@ -118,28 +118,28 @@ catkin_package(
 # include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  undistort_node.h
+  exercise_1_2_node.h
 )
 
 ## Declare a C++ library
-# add_library(undistort
-#   src/${PROJECT_NAME}/undistort.cpp
+# add_library(exercise_1_2
+#   src/${PROJECT_NAME}/exercise_1_2.cpp
 # )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-# add_dependencies(undistort ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(exercise_1_2 ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
- add_executable(undistort_node src/undistort_node.cpp)
+ add_executable(exercise_1_2_node src/exercise_1_2_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(undistort_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(exercise_1_2_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(undistort_node
+target_link_libraries(exercise_1_2_node
   ${catkin_LIBRARIES}
 )
 
@@ -158,7 +158,7 @@ target_link_libraries(undistort_node
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS undistort undistort_node
+# install(TARGETS exercise_1_2 exercise_1_2_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -183,7 +183,7 @@ target_link_libraries(undistort_node
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_undistort.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_exercise_1_2.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
