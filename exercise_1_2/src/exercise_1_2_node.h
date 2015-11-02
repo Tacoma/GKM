@@ -9,10 +9,12 @@
 class ImageConverter
 {
 	ros::NodeHandle nh_;
+    bool saved;
 	image_transport::ImageTransport it_;
 	image_transport::Subscriber image_sub_;
 	image_transport::Publisher  image_pub_;
-    image_geometry::PinholeCameraModel cam_model_;
+	image_geometry::PinholeCameraModel cam_model_;
+	int calibration_;
 	
 public:
     ImageConverter(int calibration);

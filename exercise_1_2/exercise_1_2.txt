@@ -1,0 +1,6 @@
+a)
+The main difference in our calibration is the distortion parameter d4, It is 0, while the parameter given by the website is 1.163314 for Freiburg1 and 0.917205 for Freiburg2. That means that our radial distortion only depends on r^2 and r^4, but not on r^6. The website probaby fitted a polynomial of sixth order, while we only used a polynomial of fourth order.
+The translational distortion (d2 and d3) are only slightly different as well as the camera intrinsics.
+
+b)
+The main difference can be seen at the borders of the images, e.g. the wooden strip in the top right corner is curved differently depending on the parameters. TODO(add input own website images). This is probably due to missing calibration points, because the checkerboard is mostly moved throught the image center.
