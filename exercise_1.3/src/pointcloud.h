@@ -7,16 +7,14 @@
 class PointCloudCreator
 {
 public:
-	ros::NodeHandle nh_;
-	ros::Publisher pc_pub_;
-
 	PointCloudCreator();
 	~PointCloudCreator() {}
 	
     void CloudCb(const sensor_msgs::ImageConstPtr& img_rgb, const sensor_msgs::ImageConstPtr& img_depth);
 
 private:
-    int counter_;
+	ros::NodeHandle nh_;
+	ros::Publisher pc_pub_;
 };
 
 #endif // POINTCLOUD_H
