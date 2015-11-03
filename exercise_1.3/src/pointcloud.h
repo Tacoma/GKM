@@ -14,6 +14,9 @@ public:
 	~PointCloudCreator() {}
 	
     void CloudCb(const sensor_msgs::ImageConstPtr& img_rgb, const sensor_msgs::ImageConstPtr& img_depth);
+
+private:
+    int counter_;
 };
 
 #endif // POINTCLOUD_H

@@ -10,6 +10,7 @@
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <iostream> // Debug
+//#include <sstream>
 
 using namespace sensor_msgs;
 using namespace message_filters;
@@ -17,7 +18,8 @@ using namespace message_filters;
 typedef sync_policies::ApproximateTime<Image, Image> MySyncPolicy;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
-PointCloudCreator::PointCloudCreator()
+PointCloudCreator::PointCloudCreator() :
+    counter_(0)
 {
 	pc_pub_ = nh_.advertise<PointCloud> ("pointCloud", 1);
 
@@ -29,20 +31,39 @@ PointCloudCreator::PointCloudCreator()
 	Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), img_rgb_sub, img_depth_sub);
 	sync.registerCallback(boost::bind(&PointCloudCreator::CloudCb, this, _1, _2));
 
-    std::cout << "pointcloud constructor" << std::endl;
+    std::cout << "PointCloudCreator started..." << std::endl;
     ros::spin();
 }
 
+// TODO: tf of pc and pc point color
 void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb, const sensor_msgs::ImageConstPtr& img_depth)
 {
-    std::cout << "callback triggered" << std::endl;
-    
-    PointCloud::Ptr msg (new PointCloud);
-	msg->header.frame_id = "some_tf_frame"; // TODO
-	msg->header.stamp = ros::Time::now().toNSec();
-	msg->height = msg->width = 1;
-	msg->points.push_back(pcl::PointXYZ(1.0, 2.0, 3.0));
-	
+    //std::cout << "callback triggered" << std::endl;
+
+    // create new message and fill it
+    PointCloud::Ptr msg(new PointCloud);
+    msg->header.frame_id = "world";
+    //msg->header.stamp = ros::Time::now().toNSec();
+    msg->width = 1;
+    msg->height = 10;
+
+    pcl::PointXYZ points[10];
+    points[0] = pcl::PointXYZ(0,0,0);
+    points[1] = pcl::PointXYZ(1,0,0);
+    points[2] = pcl::PointXYZ(0,1,0);
+    points[3] = pcl::PointXYZ(0,0,1);
+    points[4] = pcl::PointXYZ(1,1,0);
+    points[5] = pcl::PointXYZ(1,0,1);
+    points[6] = pcl::PointXYZ(1,1,1);
+    points[7] = pcl::PointXYZ(2,0,0);
+    points[8] = pcl::PointXYZ(0,2,0);
+    points[9] = pcl::PointXYZ(0,0,2);
+
+    for(int i=0; i<10; i++)
+    {
+        msg->points.push_back(points[i]);
+    }
+
 	pc_pub_.publish(msg);
 }
 
