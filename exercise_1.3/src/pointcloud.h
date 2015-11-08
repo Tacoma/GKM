@@ -19,10 +19,10 @@ private:
     tf::TransformListener tf_listener_;
 
     // camera parameter
-    float fx;
-    float fy;
-    float cx;
-    float cy;
+    float fx_;
+    float fy_;
+    float cx_;
+    float cy_;
 };
 
 #endif // POINTCLOUD_H

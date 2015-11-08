@@ -16,14 +16,17 @@
 
 #include <iostream> // Debug
 
+// Anwer to exercise 3 b)
+// the ground truth was recorded with a motion capture system
+
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> MySyncPolicy;
 typedef pcl::PointCloud<pcl::PointXYZRGB> MyPointCloud;
 
 PointCloudCreator::PointCloudCreator() :
-    fx(525.0),
-    fy(525.0),
-    cx(319.0),
-    cy(239.5)
+    fx_(525.0f),
+    fy_(525.0f),
+    cx_(319.0f),
+    cy_(239.5f)
 {
     pc_pub_ = nh_.advertise<MyPointCloud> ("pointCloud", 1);
 
@@ -59,7 +62,6 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
     pc.height = cv_rgb->image.rows;
     pc.points.resize(pc.width*pc.height);
 
-
     for(int y=0; y<pc.height; y++)
     {
         for(int x=0; x<pc.width; x++)
@@ -68,8 +70,8 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
             float depth = cv_depth->image.at<float>(y,x);
             cv::Vec3b colors_bgr = cv_rgb->image.at<cv::Vec3b>(y,x);
 
-            pc.points[idx].x = (x - fx) * depth / fx;
-            pc.points[idx].y = (y - cy) * depth / fy;
+            pc.points[idx].x = (x - cx_) * depth / fx_;
+            pc.points[idx].y = (y - cy_) * depth / fy_;
             pc.points[idx].z = depth;
             pc.points[idx].b = colors_bgr[0];
             pc.points[idx].g = colors_bgr[1];
