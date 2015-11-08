@@ -17,6 +17,12 @@ private:
 	ros::NodeHandle nh_;
 	ros::Publisher pc_pub_;
     tf::TransformListener tf_listener_;
+
+    // camera parameter
+    float fx;
+    float fy;
+    float cx;
+    float cy;
 };
 
 #endif // POINTCLOUD_H

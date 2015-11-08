@@ -19,7 +19,11 @@
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> MySyncPolicy;
 typedef pcl::PointCloud<pcl::PointXYZRGB> MyPointCloud;
 
-PointCloudCreator::PointCloudCreator()
+PointCloudCreator::PointCloudCreator() :
+    fx(525.0),
+    fy(525.0),
+    cx(319.0),
+    cy(239.5)
 {
     pc_pub_ = nh_.advertise<MyPointCloud> ("pointCloud", 1);
 
@@ -55,16 +59,18 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
     pc.height = cv_rgb->image.rows;
     pc.points.resize(pc.width*pc.height);
 
+
     for(int y=0; y<pc.height; y++)
     {
         for(int x=0; x<pc.width; x++)
     	{
             int idx = y*cv_rgb->image.cols + x;
+            float depth = cv_depth->image.at<float>(y,x);
             cv::Vec3b colors_bgr = cv_rgb->image.at<cv::Vec3b>(y,x);
 
-            pc.points[idx].x = (float)(x - pc.width/2)/(float)pc.width;
-            pc.points[idx].y = cv_depth->image.at<float>(y,x);
-            pc.points[idx].z = (float)(y - pc.height/2)/(float)pc.height;
+            pc.points[idx].x = (x - fx) * depth / fx;
+            pc.points[idx].y = (y - cy) * depth / fy;
+            pc.points[idx].z = depth;
             pc.points[idx].b = colors_bgr[0];
             pc.points[idx].g = colors_bgr[1];
             pc.points[idx].r = colors_bgr[2];
@@ -83,8 +89,8 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
     sensor_msgs::PointCloud2 msg;
     pcl::toROSMsg(pc,msg);
     msg.header.frame_id = "kinect";
-
     pcl_ros::transformPointCloud("/world", msg, msg, tf_listener_);
+    msg.header.frame_id = "world";
 
 	pc_pub_.publish(msg);
 }
