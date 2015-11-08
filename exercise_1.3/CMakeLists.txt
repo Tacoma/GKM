@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   message_filters
   sensor_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -135,7 +136,7 @@ include_directories(
 # add_dependencies(undistort ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
- add_executable(exercise_1_3 src/pointcloud.cpp)
+add_executable(exercise_1_3 src/pointcloud.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above

@@ -3,6 +3,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <tf/transform_listener.h>
 
 class PointCloudCreator
 {
@@ -15,6 +16,7 @@ public:
 private:
 	ros::NodeHandle nh_;
 	ros::Publisher pc_pub_;
+    tf::TransformListener tf_listener_;
 };
 
 #endif // POINTCLOUD_H

@@ -1,9 +1,10 @@
 #include "pointcloud.h"
 // pcl
 #include <sensor_msgs/PointCloud2.h>
-#include <pcl_conversions/pcl_conversions.h>
+#include <pcl_ros/transforms.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
 // sync
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
@@ -14,32 +15,26 @@
 #include <sensor_msgs/image_encodings.h>
 
 #include <iostream> // Debug
-//#include <sstream>
 
-using namespace sensor_msgs;
-using namespace message_filters;
-
-typedef sync_policies::ApproximateTime<Image, Image> MySyncPolicy;
-typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloud;
+typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> MySyncPolicy;
+typedef pcl::PointCloud<pcl::PointXYZRGB> MyPointCloud;
 
 PointCloudCreator::PointCloudCreator()
 {
-	pc_pub_ = nh_.advertise<PointCloud> ("pointCloud", 1);
+    pc_pub_ = nh_.advertise<MyPointCloud> ("pointCloud", 1);
 
-    message_filters::Subscriber<Image> img_rgb_sub(nh_, "camera/rgb/image_color", 1);
-    message_filters::Subscriber<Image> img_depth_sub(nh_, "camera/depth/image", 1);
-//    message_filters::Subscriber tf_frame_sub(nh_, "/tf", 1);
+    message_filters::Subscriber<sensor_msgs::Image> img_rgb_sub(nh_, "camera/rgb/image_color", 1);
+    message_filters::Subscriber<sensor_msgs::Image> img_depth_sub(nh_, "camera/depth/image", 1);
 
 	// ApproximateTime takes a queue size as its constructor argument, hence MySyncPolicy(10)
-	Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), img_rgb_sub, img_depth_sub);
+    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), img_rgb_sub, img_depth_sub);
 	sync.registerCallback(boost::bind(&PointCloudCreator::CloudCb, this, _1, _2));
-
     std::cout << "PointCloudCreator started..." << std::endl;
     ros::spin();
 }
 
-// TODO: tf of pc and pc point color
-void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb, const sensor_msgs::ImageConstPtr& img_depth)
+void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
+                                const sensor_msgs::ImageConstPtr& img_depth)
 {
     cv_bridge::CvImagePtr cv_rgb;
     cv_bridge::CvImagePtr cv_depth;
@@ -55,33 +50,48 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb, const
 	}
 
     // create new message and fill it
-    PointCloud::Ptr msg(new PointCloud);
-    msg->header.frame_id = "world";
-    //msg->header.stamp = ros::Time::now().toNSec();
-    msg->width = cv_rgb->image.cols;
-    msg->height = cv_rgb->image.rows;
-    
-    for(int y=0; y<cv_rgb->image.rows; y++)
+    MyPointCloud pc;
+    pc.width = cv_rgb->image.cols;
+    pc.height = cv_rgb->image.rows;
+    pc.points.resize(pc.width*pc.height);
+
+    for(int y=0; y<pc.height; y++)
     {
-    	for(int x=0; x<cv_rgb->image.cols; x++)
+        for(int x=0; x<pc.width; x++)
     	{
-    		int b = cv_rgb->image.at<cv::Vec3b>(y,x)[0];
-    		int g = cv_rgb->image.at<cv::Vec3b>(y,x)[1];
-    		int r = cv_rgb->image.at<cv::Vec3b>(y,x)[2];
-    		pcl::PointXYZRGB point = pcl::PointXYZRGB(r,g,b);
-    		point.x = (float)(x-cv_rgb->image.cols/2)/(float)cv_rgb->image.cols ;
-    		point.y = cv_depth->image.at<float>(y,x);
-    		point.z = (float)(cv_rgb->image.rows/2-y)/(float)cv_rgb->image.rows;
-    		msg->points.push_back(point);
-    	}
+            int idx = y*cv_rgb->image.cols + x;
+            cv::Vec3b colors_bgr = cv_rgb->image.at<cv::Vec3b>(y,x);
+
+            pc.points[idx].x = (float)(x - pc.width/2)/(float)pc.width;
+            pc.points[idx].y = cv_depth->image.at<float>(y,x);
+            pc.points[idx].z = (float)(y - pc.height/2)/(float)pc.height;
+            pc.points[idx].b = colors_bgr[0];
+            pc.points[idx].g = colors_bgr[1];
+            pc.points[idx].r = colors_bgr[2];
+        }
     }
-    
+
+    try
+    {
+        tf_listener_.waitForTransform("/world", "/kinect", ros::Time::now(), ros::Duration(8.0f));
+    }
+    catch(tf::TransformException &e)
+    {
+        ROS_ERROR("transform exception: %s", e.what());
+    }
+
+    sensor_msgs::PointCloud2 msg;
+    pcl::toROSMsg(pc,msg);
+    msg.header.frame_id = "kinect";
+
+    pcl_ros::transformPointCloud("/world", msg, msg, tf_listener_);
+
 	pc_pub_.publish(msg);
 }
 
 int main(int argc, char** argv)
 {
 	ros::init(argc, argv, "PointCloudCreator");
-	PointCloudCreator pcc;
+    PointCloudCreator pcc;
 	return 0;
 }
