@@ -379,9 +379,9 @@ void calculateErrorImage(const Eigen::VectorXf &residuals, int w, int h, cv::Mat
 }
 
 
-Eigen::VectorXf calculateError(const cv::Mat &grayRef, const cv::Mat &depthRef,
-                                  const cv::Mat &grayCur, const cv::Mat &depthCur,
-                                  const Eigen::VectorXf &xi, const Eigen::Matrix3f &K)
+Eigen::VectorXf calculateError( const cv::Mat &grayRef, const cv::Mat &depthRef,
+                                const cv::Mat &grayCur, const cv::Mat &depthCur,
+                                const Eigen::VectorXf &xi, const Eigen::Matrix3f &K)
 {
     Eigen::VectorXf residualsVec;
 
@@ -514,14 +514,36 @@ void weighting(Eigen::VectorXf &residuals, Eigen::VectorXf &weights)
 #endif
 }
 
-// TODO: implement
-void deriveNumeric(const cv::Mat &grayRef, const cv::Mat &depthRef,
-                                  const cv::Mat &grayCur, const cv::Mat &depthCur,
-                                  const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
-                                  Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
+
+// TODO: test
+void deriveNumeric( const cv::Mat &grayRef, const cv::Mat &depthRef,
+                    const cv::Mat &grayCur, const cv::Mat &depthCur,
+                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
+                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
-  // TODO: implement
+    // residuals are 1 x n
+    // J is n x 6
+    const float eps = 0.000001f;
+    Eigen::VectorXf epsVec(6,1); // may need to set data zero
+    Eigen::VectorXf xiPerm;
+    Eigen::VectorXf residualsTmp;
+
+    residuals = calculateError(grayRef, depthRef, grayCur, depthCur, xi, K);
+    for(unsigned int j=0; j<6; j++)
+    {
+        epsVec << 0,0,0,0,0,0;
+        epsVec(j) = eps;
+
+        xiPerm = Sophus::SE3f::log( Sophus::SE3f::exp(epsVec) * Sophus::SE3f::exp(xi) );
+
+        residualsTmp = calculateError(grayRef, depthRef, grayCur, depthCur, xiPerm, K);
+        for(unsigned int i=0; i<residuals.size(); i++)
+        {
+            J(i,j) = (residualsTmp(i)-residuals(i)) / eps;
+        }
+    }
 }
+
 
 // TODO: implement
 void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
@@ -530,7 +552,7 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
-  // TODO: implement
+    // TODO: implement
 }
 
 // TODO: implement
@@ -638,8 +660,8 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
         for (int itr = 0; itr < numIterations; ++itr)
         {
             // compute residuals and Jacobian
-            Eigen::VectorXf residuals;
-            Eigen::MatrixXf J;
+            Eigen::VectorXf residuals;                          // 1 x n
+            Eigen::MatrixXf J(grayRef.rows * grayRef.cols, 6);  // n x 6 // maybe columns and rows have to be switched
 
             if( useNumericDerivative )
               deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, kLevel, residuals, J);
