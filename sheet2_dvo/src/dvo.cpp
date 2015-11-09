@@ -533,9 +533,14 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
   // TODO: implement
 }
 
-
+// TODO: implement
 // expects float images (CV_32FC1), grayscale scaled to [0,1], metrical depth
-void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const cv::Mat& imgDepthRef, const cv::Mat& imgGrayCur, const cv::Mat& imgDepthCur, const Eigen::Matrix3f& cameraMatrix ) 
+// @parameter transform: transform from _ to _
+// @parameter imgGrayRef, imgDepthRef: reference rgbd image
+// @parameter imgGrayCur, imgDepthCur: current rgbd image
+// @parameter cameraMatrix: camera intrinsics
+void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const cv::Mat& imgDepthRef,
+                  const cv::Mat& imgGrayCur, const cv::Mat& imgDepthCur, const Eigen::Matrix3f& cameraMatrix )
 {
   
     cv::Mat grayRef = imgGrayRef;
@@ -585,7 +590,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     Eigen::VectorXf xi = Eigen::VectorXf::Zero( 6 );
     Eigen::VectorXf lastXi = Eigen::VectorXf::Zero( 6 );
     
-//     convertSE3ToTf(xi, rot, t);
+    //convertSE3ToTf(xi, rot, t);
     rot = transform.block<3,3>(0,0);
     t = transform.block<3,1>(0,3);
     convertTfToSE3( rot, t, xi );
@@ -610,6 +615,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     Vec6f delta;
     
     float tmr = (float)cv::getTickCount();
+    // Iterate pyramids
     for (int level = maxLevel; level >= minLevel; --level)
     {
         float lambda = 0.1;
@@ -628,6 +634,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
         computeGradient(grayCur, gradY, 1);
 
         float errorLast = std::numeric_limits<float>::max();
+        // Iterative computation of pose (rot, t)
         for (int itr = 0; itr < numIterations; ++itr)
         {
             // compute residuals and Jacobian
@@ -673,7 +680,8 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             Eigen::VectorXf b = Jt * residuals;
             if (useGD)
             {
-                // TODO: Implement Gradient Descent (step size 0.001)
+                // BEN: Implement Gradient Descent (step size 0.001)
+                delta = 0.001 * -b;
             }
             
             if (useGN)
@@ -686,7 +694,12 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             
             if (useLM)
             {
-                // TODO: Implement Levenberg-Marquardt algorithm
+                // BEN: Implement Levenberg-Marquardt algorithm
+                A = Jt * J;
+                Mat6f diag = A.diagonal().asDiagonal();
+                ROS_INFO_STREAM( "If " << diag << " is is the diagonal of " << A << " delete this output");
+                A = A + lambda * diag;
+                delta = -(A.ldlt().solve(b));
             }
 
             // apply update

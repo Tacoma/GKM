@@ -28,6 +28,7 @@
 
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
+Eigen::Matrix4f integrated_transform_;
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -125,7 +126,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
      ROS_ERROR_STREAM( "transform: " << transform << std::endl );
     
 
-    // TODO: dump trajectory for evaluation 
+    // TODO: dump trajectory for evaluation / integrated_transform
     
     
     pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
@@ -134,7 +135,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     cloud->header = pcl_conversions::toPCL( image_rgb->header );
     
     cloud->header.frame_id = "/world";
-    pcl::transformPointCloud( *cloud, *cloud, transform );
+    pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
         
     pub_pointcloud.publish( *cloud );
     
