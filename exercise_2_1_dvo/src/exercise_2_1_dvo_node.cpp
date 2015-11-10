@@ -20,8 +20,7 @@
 
 #include <tf/transform_listener.h>
 
-
-#include <sheet3_dvo/dvo.h>
+#include <dvo.h>
 
 #include <fstream>
 
@@ -122,11 +121,13 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     
     grayRef = grayCur.clone();
     depthRef = depthCur.clone();
-    
-     ROS_ERROR_STREAM( "transform: " << transform << std::endl );
-    
+
+#if DEBUG_OUTPUT
+    ROS_ERROR_STREAM( "transform: " << transform);
+#endif
 
     // TODO: dump trajectory for evaluation / integrated_transform
+    integrated_transform_ = transform;
     
     
     pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
@@ -134,11 +135,10 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     
     cloud->header = pcl_conversions::toPCL( image_rgb->header );
     
-    cloud->header.frame_id = "/world";
-    pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
+    cloud->header.frame_id = "/openni_rgb_optical_frame";
+    //pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
         
-    pub_pointcloud.publish( *cloud );
-    
+    pub_pointcloud.publish( *cloud ); 
             
 }
 

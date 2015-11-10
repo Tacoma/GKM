@@ -1,7 +1,7 @@
 // This source code is intended for use in the teaching course "Vision-Based Navigation" at Technical University Munich only. 
 // Copyright 2015 Robert Maier, Joerg Stueckler, Technical University Munich
 
-#include <sheet3_dvo/dvo.h>
+#include <dvo.h>
 
 #include <iostream>
 #include <fstream>
@@ -29,7 +29,7 @@
 #define STR(x)  STR1(x)
 
 
-#define DEBUG_OUTPUT 0
+#define DEBUG_OUTPUT 1
 
 void convertSE3ToTf(const Eigen::VectorXf &xi, Eigen::Matrix3f &rot, Eigen::Vector3f &t)
 {
@@ -555,7 +555,7 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     // TODO: implement
 }
 
-// TODO: implement
+// TODO: test
 // expects float images (CV_32FC1), grayscale scaled to [0,1], metrical depth
 // @parameter transform: transform from _ to _
 // @parameter imgGrayRef, imgDepthRef: reference rgbd image
@@ -617,9 +617,9 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     t = transform.block<3,1>(0,3);
     convertTfToSE3( rot, t, xi );
     
-    std::cout << "Initial pose: " << std::endl;
-    std::cout << "t = " << t.transpose() << std::endl;
-    std::cout << "R = " << rot << std::endl;
+    ROS_INFO_STREAM("Initial pose: ");
+    ROS_INFO_STREAM("t = " << t.transpose() << std::endl);
+    ROS_INFO_STREAM("R = " << rot << std::endl);
     
 
     bool useNumericDerivative = true;
@@ -672,8 +672,8 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             // compute and show error image
             cv::Mat errorImage;
             calculateErrorImage(residuals, grayRef.cols, grayRef.rows, errorImage);
-            cv::imshow("error", errorImage);
-            cv::waitKey(100);
+            //cv::imshow("error", errorImage);
+            //cv::waitKey(100);
 #endif
 
             // calculate error
@@ -719,7 +719,9 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
                 // BEN: Implement Levenberg-Marquardt algorithm
                 A = Jt * J;
                 Mat6f diag = A.diagonal().asDiagonal();
-                ROS_INFO_STREAM( "If " << diag << " is is the diagonal of " << A << " delete this output");
+#if DEBUG_OUTPUT
+                ROS_ERROR_STREAM( "If " << diag << " is is the diagonal of " << A << " delete this output");
+#endif
                 A = A + lambda * diag;
                 delta = -(A.ldlt().solve(b));
             }
@@ -729,8 +731,8 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             lastXi = xi;
             xi = Sophus::SE3f::log( Sophus::SE3f::exp(xi) * Sophus::SE3f::exp(delta) );
 #if DEBUG_OUTPUT
-            ROS_ERROR_STREAM( << "delta = " << delta.transpose() << " size = " << delta.rows() << " x " << delta.cols() << std::endl;
-            std::cout << "xi = " << xi.transpose() << std::endl;
+            ROS_INFO_STREAM( "delta = " << delta.transpose() << " size = " << delta.rows() << " x " << delta.cols());
+            ROS_INFO_STREAM( "xi = " << xi.transpose());
 #endif
             
             // compute error again
@@ -760,10 +762,10 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             }
 
             errorLast = error;
-        }
-    }
+        }// iteration
+    }// level
     tmr = ((float)cv::getTickCount() - tmr)/cv::getTickFrequency();
-    ROS_ERROR_STREAM( "runtime: " << tmr );
+    ROS_INFO_STREAM( "runtime: " << tmr );
 
     convertSE3ToTf(xi, rot, t);
     
@@ -773,7 +775,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
 
     
 #if DEBUG_OUTPUT
-    cv::waitKey(0);
+    //cv::waitKey(0);
 #endif
 
 }

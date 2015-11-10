@@ -1,10 +1,20 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(sheet2_dvo)
+project(exercise_2_1_dvo)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED roscpp message_filters sensor_msgs image_geometry cv_bridge pcl_conversions pcl_ros cmake_modules)
+find_package(catkin REQUIRED 
+  roscpp 
+  message_filters 
+  sensor_msgs 
+  image_geometry 
+  cv_bridge 
+  pcl_conversions 
+  pcl_ros 
+  cmake_modules
+  tf_conversions 
+)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -85,7 +95,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -ftree-vectorize -march=native")
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES sheet3_dvo
+#  LIBRARIES exercise_2_1_dvo
 #  CATKIN_DEPENDS other_catkin_pkg
 #  DEPENDS system_lib
 )
@@ -104,14 +114,14 @@ add_library(dvo
 )
 
 # Declare a cpp executable
-add_executable(sheet2_dvo_node src/sheet2_dvo_node.cpp)
+add_executable(exercise_2_1_dvo_node src/exercise_2_1_dvo_node.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
-# add_dependencies(sheet3_dvo_node sheet3_dvo_generate_messages_cpp)
+# add_dependencies(exercise_2_1_dvo_node exercise_2_1_dvo_generate_messages_cpp)
 
 # Specify libraries to link a library or executable target against
-target_link_libraries(sheet2_dvo_node
+target_link_libraries(exercise_2_1_dvo_node
   ${catkin_LIBRARIES}
   dvo
 )
@@ -131,7 +141,7 @@ target_link_libraries(sheet2_dvo_node
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS sheet3_dvo sheet3_dvo_node
+# install(TARGETS exercise_2_1_dvo exercise_2_1_dvo_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -156,7 +166,7 @@ target_link_libraries(sheet2_dvo_node
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_sheet3_dvo.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_exercise_2_1_dvo.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

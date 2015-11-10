@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>sheet2_dvo</name>
+  <name>exercise_2_1_dvo</name>
   <version>0.0.0</version>
-  <description>The sheet2_dvo package</description>
+  <description>The exercise_2_1_dvo package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -46,6 +46,7 @@
   <build_depend>pcl_ros</build_depend>
   <build_depend>message_filters</build_depend>
   <build_depend>pcl_conversions</build_depend>
+  <build_depend>tf_conversions</build_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
