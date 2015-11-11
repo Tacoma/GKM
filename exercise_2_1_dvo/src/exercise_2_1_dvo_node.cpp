@@ -19,6 +19,7 @@
 #include <pcl/common/transforms.h>
 
 #include <tf/transform_listener.h>
+#include <tf/transform_broadcaster.h>
 
 #include <dvo.h>
 
@@ -28,6 +29,7 @@
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
 Eigen::Matrix4f integrated_transform_;
+bool isFirstIter_ = true;
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -127,19 +129,42 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
 #endif
 
     // TODO: dump trajectory for evaluation / integrated_transform
+//    if(isFirstIter_) {
+//        isFirstIter_ = false;
+//        integrated_transform_ = transform;
+//    } else {
+//        integrated_transform_ = integrated_transform_ * transform;
+//    }
     integrated_transform_ = transform;
-    
     
     pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
     imagesToPointCloud( img_rgb_cv_ptr->image, img_depth_cv_ptr->image, cloud );
     
     cloud->header = pcl_conversions::toPCL( image_rgb->header );
     
-    cloud->header.frame_id = "/openni_rgb_optical_frame";
+//    cloud->header.frame_id = "/openni_rgb_optical_frame";
+    cloud->header.frame_id = "/world";
     //pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
         
     pub_pointcloud.publish( *cloud ); 
-            
+
+    // convert and broadcast tf frame
+    tf::Transform tf;
+    tf::Vector3 origin;
+    origin.setValue(integrated_transform_(0,3), integrated_transform_(1,3), integrated_transform_(2,3));
+    tf::Matrix3x3 rot;
+    rot.setValue( integrated_transform_(0,0), integrated_transform_(0,1), integrated_transform_(0,2),
+                  integrated_transform_(1,0), integrated_transform_(1,1), integrated_transform_(1,2),
+                  integrated_transform_(2,0), integrated_transform_(2,1), integrated_transform_(2,2));
+
+    tf::Quaternion tfqt;
+    rot.getRotation(tfqt);
+
+    tf.setOrigin(origin);
+    tf.setRotation(tfqt);
+
+    tf::TransformBroadcaster tf_broadcaster;
+    tf_broadcaster.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world", "odometry"));
 }
 
 int main(int argc, char** argv)

@@ -70,15 +70,15 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
             float depth = cv_depth->image.at<float>(y,x);
             cv::Vec3b colors_bgr = cv_rgb->image.at<cv::Vec3b>(y,x);
 
-            pc.points[idx].x = (x - cx_) * depth / fx_;
-            pc.points[idx].y = (y - cy_) * depth / fy_;
+            pc.points[idx].x = (y - cy_) * depth / fy_;
+            pc.points[idx].y = (x - cx_) * depth / fx_;
             pc.points[idx].z = depth;
             pc.points[idx].b = colors_bgr[0];
             pc.points[idx].g = colors_bgr[1];
             pc.points[idx].r = colors_bgr[2];
         }
     }
-
+	/*
     try
     {
         tf_listener_.waitForTransform("/world", "/kinect", ros::Time::now(), ros::Duration(8.0f));
@@ -87,7 +87,7 @@ void PointCloudCreator::CloudCb(const sensor_msgs::ImageConstPtr& img_rgb,
     {
         ROS_ERROR("transform exception: %s", e.what());
     }
-
+	*/
     sensor_msgs::PointCloud2 msg;
     pcl::toROSMsg(pc,msg);
     msg.header.frame_id = "kinect";

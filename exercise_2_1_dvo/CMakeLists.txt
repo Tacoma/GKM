@@ -13,7 +13,6 @@ find_package(catkin REQUIRED
   pcl_conversions 
   pcl_ros 
   cmake_modules
-  tf_conversions 
 )
 
 ## System dependencies are found with CMake's conventions
