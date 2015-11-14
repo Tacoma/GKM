@@ -29,7 +29,7 @@
 #define STR(x)  STR1(x)
 
 
-#define DEBUG_OUTPUT 1
+#define DEBUG_OUTPUT 0
 
 void convertSE3ToTf(const Eigen::VectorXf &xi, Eigen::Matrix3f &rot, Eigen::Vector3f &t)
 {

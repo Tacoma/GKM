@@ -28,8 +28,11 @@
 
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
-Eigen::Matrix4f integrated_transform_;
+boost::shared_ptr<tf::TransformBroadcaster> tf_broadcaster_; // pointer to delay creation 
+boost::shared_ptr<tf::TransformListener> tf_listener_;
+tf::StampedTransform integrated_transform_;
 bool isFirstIter_ = true;
+std::string cam_ref_tf_name = "/openni_rgb_optical_frame";
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -129,42 +132,46 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
 #endif
 
     // TODO: dump trajectory for evaluation / integrated_transform
-//    if(isFirstIter_) {
-//        isFirstIter_ = false;
-//        integrated_transform_ = transform;
-//    } else {
-//        integrated_transform_ = integrated_transform_ * transform;
-//    }
-    integrated_transform_ = transform;
+    // get ground truth  in first iteration
+    if (isFirstIter_) {
+      isFirstIter_ = false;
+      // get tf
+      try{
+	tf_listener_->lookupTransform("/world", cam_ref_tf_name, ros::Time(0), integrated_transform_);
+      }
+      catch (tf::TransformException ex){
+	ROS_ERROR("%s",ex.what());
+      }
+    }
     
-    pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
-    imagesToPointCloud( img_rgb_cv_ptr->image, img_depth_cv_ptr->image, cloud );
-    
-    cloud->header = pcl_conversions::toPCL( image_rgb->header );
-    
-//    cloud->header.frame_id = "/openni_rgb_optical_frame";
-    cloud->header.frame_id = "/world";
-    //pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
-        
-    pub_pointcloud.publish( *cloud ); 
-
     // convert and broadcast tf frame
     tf::Transform tf;
     tf::Vector3 origin;
-    origin.setValue(integrated_transform_(0,3), integrated_transform_(1,3), integrated_transform_(2,3));
+    origin.setValue(transform(0,3), transform(1,3), transform(2,3));
     tf::Matrix3x3 rot;
-    rot.setValue( integrated_transform_(0,0), integrated_transform_(0,1), integrated_transform_(0,2),
-                  integrated_transform_(1,0), integrated_transform_(1,1), integrated_transform_(1,2),
-                  integrated_transform_(2,0), integrated_transform_(2,1), integrated_transform_(2,2));
+    rot.setValue( transform(0,0), transform(0,1), transform(0,2),
+                  transform(1,0), transform(1,1), transform(1,2),
+                  transform(2,0), transform(2,1), transform(2,2));
 
     tf::Quaternion tfqt;
     rot.getRotation(tfqt);
 
     tf.setOrigin(origin);
     tf.setRotation(tfqt);
-
-    tf::TransformBroadcaster tf_broadcaster;
-    tf_broadcaster.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world", "odometry"));
+    
+    integrated_transform_ *= tf;
+    
+    pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
+    imagesToPointCloud( img_rgb_cv_ptr->image, img_depth_cv_ptr->image, cloud );
+    
+    cloud->header = pcl_conversions::toPCL( image_rgb->header );
+    
+    cloud->header.frame_id = cam_ref_tf_name;
+//    cloud->header.frame_id = "/world";
+//    pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
+        
+    pub_pointcloud.publish( *cloud );   
+    tf_broadcaster_->sendTransform(tf::StampedTransform(integrated_transform_, ros::Time::now(), "world", "odometry"));
 }
 
 int main(int argc, char** argv)
@@ -172,6 +179,9 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "sheet2_dvo_node");
 
   ros::NodeHandle nh("~");
+  tf_broadcaster_.reset(new tf::TransformBroadcaster());
+  tf_listener_.reset( new tf::TransformListener());
+  
   message_filters::Subscriber<sensor_msgs::Image> image_rgb_sub(nh, "image_rgb", 1);
   message_filters::Subscriber<sensor_msgs::Image> image_depth_sub(nh, "image_depth", 1);
 
