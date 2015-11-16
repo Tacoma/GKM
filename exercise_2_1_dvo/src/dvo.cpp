@@ -558,14 +558,15 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 
     Eigen::MatrixXf RKInv = R * K.inverse();
 
-    /*
-     warp pixels into other image, save intermediate results
-     these contain the x,y image coordinates of the respective
-     reference-pixel, transformed & projected into the new image.
-    */
-    cv::Mat xImg,yImg,xp,yp,zp;
-    xImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-    yImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
+
+//     warp pixels into other image, save intermediate results
+//     these contain the x,y image coordinates of the respective
+//     reference-pixel, transformed & projected into the new image.
+
+    //cv::Mat xImg,yImg;
+    cv::Mat xp,yp,zp;
+    //xImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
+    //yImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
 
 
 
@@ -595,8 +596,8 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                 // projected point (for interpolation of intensity and gradients)
                 pTransProj = K * pTrans;
 
-                xImg.at<double>(y,x) = pTransProj(0) / pTransProj(2);
-                yImg.at<double>(y,x) = pTransProj(1) / pTransProj(2);
+                //xImg.at<double>(y,x) = pTransProj(0) / pTransProj(2);
+                //yImg.at<double>(y,x) = pTransProj(1) / pTransProj(2);
 
                 // warped 3d point, for calculation of Jacobian.
                 xp.at<double>(y,x) = pTrans(0);
@@ -609,13 +610,11 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     }
 
 
-    /*
-     calculate actual derivative.
-     */
+
+//     calculate actual derivative.
+
     // 1.: calculate image derivatives, and interpolate at warped positions.
     cv::Mat dxCurr,dyCurr,dxInt,dyInt;
-    dxCurr = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
-    dyCurr = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
 
     dxInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
     dyInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
@@ -626,45 +625,28 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     int width = dxCurr.cols;
     int height = dxCurr.rows;
 
-    for( int y = 1; y < height-1 ; y++ ){
-        for (int x = 0; x < width; x++)
-        {
-            dyCurr.at<double>(y,x) = 0.5*(grayCur.at<double>(y+1,x) - grayCur.at<double>(y-1,x));
-        }
-    }
 
-    for (int x = 1; x < width - 1; x++){
-        for( int y = 0; y < height ; y++ )
-        {
-            dyCurr.at<double>(y,x) = 0.5*(grayCur.at<double>(y,x+1) - grayCur.at<double>(y,x-1));
-        }
-    }
     //TODO: Check interpolation
-    for( int y = 0; y < height ; y++ )
-    {
-        for (int x = 0; x < width; x++)
-        {
+//    for( int y = 0; y < height ; y++ )
+//    {
+//        for (int x = 0; x < width; x++)
+//        {
 
-        dxInt.at<double>(y,x) = K(0,0) * interpolate(ptrdxCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
-        dyInt.at<double>(y,x) = K(1,1) * interpolate(ptrdyCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
+//        dxInt.at<double>(y,x) = K(0,0) * interpolate(ptrdxCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
+//        dyInt.at<double>(y,x) = K(1,1) * interpolate(ptrdyCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
 
-        }
+//        }
 
-    }
+//    }
 
-    /* Matlab interpolation sample
-    dxInterp = K(1,1) * reshape(interp2(dxI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
-    dyInterp = K(2,2) * reshape(interp2(dyI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
-    */
 
-    /*
-    TODO: Check this.... Maybe Not required
-    // 2.: get warped 3d points (x', y', z')
+//    TODO: Check this.... Maybe Not required
+//    // 2.: get warped 3d points (x', y', z')
 
-    xp = reshape(xp,xp.rows * xp.cols,1);
-    yp = reshape(yp,size(I,1) * size(I,2),1);
-    zp = reshape(zp,size(I,1) * size(I,2),1);
-    */
+//    xp = reshape(xp,xp.rows * xp.cols,1);
+//    yp = reshape(yp,size(I,1) * size(I,2),1);
+//    zp = reshape(zp,size(I,1) * size(I,2),1);
+
 
     // 3. direct implementation of kerl2012msc.pdf Eq. (4.14):
     width = dxCurr.cols;
@@ -674,6 +656,10 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     {
         for (int x = 0; x < width; x++)
         {
+            dxInt.at<double>(y,x) = K(0,0) * gradX.at<double>(y,x);
+            dyInt.at<double>(y,x) = K(1,1) * gradY.at<double>(y,x);
+
+
             J(y*width + x , 0) = dxInt.at<double>(y,x) / zp.at<double>(y,x);
             J(y*width + x , 1) = dyInt.at<double>(y,x) / zp.at<double>(y,x);
             J(y*width + x , 2) = -(dxInt.at<double>(y,x)*xp.at<double>(y,x) + dyInt.at<double>(y,x)*yp.at<double>(y,x)) / (zp.at<double>(y,x)*zp.at<double>(y,x));
@@ -684,7 +670,7 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     }
     // invert jacobian: in kerl2012msc.pdf, the difference is defined the other
     // way round, see (4.6).
-    J = -J;
+    J = J.inverse();
 }
 
 // TODO: test
