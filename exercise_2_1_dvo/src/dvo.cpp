@@ -29,7 +29,7 @@
 #define STR(x)  STR1(x)
 
 
-#define DEBUG_OUTPUT 0
+#define DEBUG_OUTPUT 1
 
 void convertSE3ToTf(const Eigen::VectorXf &xi, Eigen::Matrix3f &rot, Eigen::Vector3f &t)
 {
@@ -552,125 +552,83 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
+
     Eigen::Matrix3f R;
     Eigen::Vector3f t;
     convertSE3ToTf(xi, R, t);
 
     Eigen::MatrixXf RKInv = R * K.inverse();
 
-
-//     warp pixels into other image, save intermediate results
-//     these contain the x,y image coordinates of the respective
-//     reference-pixel, transformed & projected into the new image.
-
-    //cv::Mat xImg,yImg;
-    cv::Mat xp,yp,zp;
-    //xImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-    //yImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-
-
-
-    // these contain the 3d position of the transformed point
-    xp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-    yp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-    zp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
-
     Eigen::Vector3f tempVec(3,1);
     Eigen::Vector3f p(3,1);
     Eigen::Vector3f pTrans(3,1);
-    Eigen::Vector3f pTransProj(3,1);
 
+#if DEBUG_OUTPUT
+    ROS_ERROR_STREAM( "t: " << t(0) << ","<< t(1) << "," << t(2) << "\n");
+    ROS_ERROR_STREAM( "R: " << R(0,0) << ","<< R(0,1) << "," << R(0,2) << "\n");
+#endif
 
-    for (int x = 0; x < grayRef.cols; x++)
+    double xp = 0;
+    double yp = 0;
+    double zp = 0;
+    double dxInt ,dyInt ;
+
+    int width = grayRef.cols;
+    int height = grayRef.rows;
+    double dRef;
+    residuals.resize(width*height);
+
+    for (int x = 0; x < width ; x++)
     {
-        for (int y=0; y < grayRef.rows ; y++)
+        for (int y=0; y < height ; y++)
         {
-            tempVec << x,y,1;
-            p = tempVec * depthRef.at<double>(y,x);
 
-            // transform to image (unproject, rotate & translate)
-            pTrans = RKInv * p + t;
+            dRef = depthRef.at<double>(y,x);
+
+            p << x * dRef , y * dRef , dRef ;
+
+//            #if DEBUG_OUTPUT
+//                ROS_ERROR_STREAM( "P: " << p(0) << "\n");
+//                ROS_ERROR_STREAM( "P: " << p(1) << "\n");
+//                ROS_ERROR_STREAM( "P: " << p(2) << "\n");
+//                ROS_ERROR_STREAM( "depth: " << dRef << "\n");
+//            #endif
+
+
 
             // if point is valid (depth > 0), project and save result.
-            if(pTrans(2) > 0 && depthRef.at<double>(y,x) > 0){
-                // projected point (for interpolation of intensity and gradients)
-                pTransProj = K * pTrans;
-
-                //xImg.at<double>(y,x) = pTransProj(0) / pTransProj(2);
-                //yImg.at<double>(y,x) = pTransProj(1) / pTransProj(2);
-
+            if(dRef > 0 && dRef < 100)
+            {
+                // transform to image (unproject, rotate & translate)
+                pTrans = RKInv * p + t;
                 // warped 3d point, for calculation of Jacobian.
-                xp.at<double>(y,x) = pTrans(0);
-                yp.at<double>(y,x) = pTrans(1);
-                zp.at<double>(y,x) = pTrans(2);
+                xp = pTrans(0);
+                yp = pTrans(1);
+                zp = pTrans(2);
+
+
+
+
+            dxInt = K(0,0) * gradX.at<double>(y,x);
+            dyInt = K(1,1) * gradY.at<double>(y,x);
+
+            J(y*width + x , 0) = dxInt / zp;
+            J(y*width + x , 1) = dyInt / zp;
+            J(y*width + x , 2) = -(dxInt*xp + dyInt*yp) / (zp*zp);
+            J(y*width + x , 3) = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
+            J(y*width + x , 4) = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
+            J(y*width + x , 5) = (- dxInt* yp + dyInt*xp)/ zp;
+
+            //residuals(y*width + x) = grayRef.at<double>(x,y) - grayCur.at<double>(x,y);
 
             }
-
         }
     }
 
 
+    J = -J;
+//    deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, K, residuals, J);
 
-//     calculate actual derivative.
-
-    // 1.: calculate image derivatives, and interpolate at warped positions.
-    cv::Mat dxCurr,dyCurr,dxInt,dyInt;
-
-    dxInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
-    dyInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
-
-    const float* ptrdxCurr = (const float*)dxCurr.data;
-    const float* ptrdyCurr = (const float*)dyCurr.data;
-
-    int width = dxCurr.cols;
-    int height = dxCurr.rows;
-
-
-    //TODO: Check interpolation
-//    for( int y = 0; y < height ; y++ )
-//    {
-//        for (int x = 0; x < width; x++)
-//        {
-
-//        dxInt.at<double>(y,x) = K(0,0) * interpolate(ptrdxCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
-//        dyInt.at<double>(y,x) = K(1,1) * interpolate(ptrdyCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
-
-//        }
-
-//    }
-
-
-//    TODO: Check this.... Maybe Not required
-//    // 2.: get warped 3d points (x', y', z')
-
-//    xp = reshape(xp,xp.rows * xp.cols,1);
-//    yp = reshape(yp,size(I,1) * size(I,2),1);
-//    zp = reshape(zp,size(I,1) * size(I,2),1);
-
-
-    // 3. direct implementation of kerl2012msc.pdf Eq. (4.14):
-    width = dxCurr.cols;
-    height = dxCurr.rows;
-
-    for( int y = 0; y < height ; y++ )
-    {
-        for (int x = 0; x < width; x++)
-        {
-            dxInt.at<double>(y,x) = K(0,0) * gradX.at<double>(y,x);
-            dyInt.at<double>(y,x) = K(1,1) * gradY.at<double>(y,x);
-
-
-            J(y*width + x , 0) = dxInt.at<double>(y,x) / zp.at<double>(y,x);
-            J(y*width + x , 1) = dyInt.at<double>(y,x) / zp.at<double>(y,x);
-            J(y*width + x , 2) = -(dxInt.at<double>(y,x)*xp.at<double>(y,x) + dyInt.at<double>(y,x)*yp.at<double>(y,x)) / (zp.at<double>(y,x)*zp.at<double>(y,x));
-            J(y*width + x , 3) = - (dxInt.at<double>(y,x)*xp.at<double>(y,x)*yp.at<double>(y,x))/(zp.at<double>(y,x)*zp.at<double>(y,x)) - dyInt.at<double>(y,x)*(1+(yp.at<double>(y,x)/zp.at<double>(y,x))*(yp.at<double>(y,x)/zp.at<double>(y,x)));
-            J(y*width + x , 4) = + dxInt.at<double>(y,x)* (1 + (xp.at<double>(y,x) / zp.at<double>(y,x))*(xp.at<double>(y,x) / zp.at<double>(y,x))) + (dyInt.at<double>(y,x)*xp.at<double>(y,x)* yp.at<double>(y,x))/(zp.at<double>(y,x)*zp.at<double>(y,x));
-            J(y*width + x , 5) = (- dxInt.at<double>(y,x)* yp.at<double>(y,x) + dyInt.at<double>(y,x)*xp.at<double>(y,x))/ zp.at<double>(y,x);
-        }
-    }
-    // invert jacobian: in kerl2012msc.pdf, the difference is defined the other
-    // way round, see (4.6).
-    J = J.inverse();
 }
 
 // TODO: test
