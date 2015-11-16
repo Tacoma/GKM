@@ -78,7 +78,7 @@ private:
 		tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
 		tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
 
-
+        sendControlSignal();
 	}
 
 	void groundTruthPoseCallback(
@@ -97,9 +97,6 @@ private:
 
 		ground_truth_pose = pose;
 		ground_truth_time = msg->header.stamp.toSec();
-
-
-
 	}
 
 	void pose1Callback(
@@ -111,30 +108,52 @@ private:
 		tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
 		SE3Type pose(orientation, position);
-
-
 	}
 
-
+    // exercise 1 d)
 	mav_msgs::CommandAttitudeThrust computeCommandFromForce(
 			const Vector3 & control_force, const SE3Type & pose,
 			double delta_time) {
+        // TODO: implement
+        float yaw = 0.5f; // ?
+        // f = m * a    ==>     a = f / m
+        Vector3 a = control_force/m;
+        float roll =  1.0f/g * (a.x()*sin(yaw) - a.y()*cos(yaw));
+        float pitch = 1.0f/g * (a.x()*cos(yaw) + a.y()*sin(yaw));
+        float thrust = a.z() + m*g;
 
-
+        // mav_msgs::CommandAttitudeThrust_(roll, pitch, yaw, thrust)
+        mav_msgs::CommandAttitudeThrust msg;
+        msg.roll = roll;    // [rad]
+        msg.pitch = pitch;  // [rad]
+        msg.yaw_rate = yaw; // [rad/s]
+        msg.thrust = thrust;
+        return msg;
 	}
 
+    // exercise 1 c)
 	Vector3 computeDesiredForce(const SE3Type & pose, const Vector3 & linear_velocity,
 			double delta_time) {
+        // TODO: implement
+        SE3Type curr_pose;
+        Vector3 curr_velocity;
+        getPoseAndVelocity(curr_pose, curr_velocity);
 
+        float kp = 1.0f; // proportional gains of the PID controller
+        float kd = 1.0f; // differential gains of the PID controller
+        float ki = 1.0f; // integral gains of the PID controller
 
+        // x'' = kp*(xd-x) + kd*(xd'-x') + ki*integral(xd-x, delta_time)
+        Vector3 a = kp*(pose.translation() - curr_pose.translation()) +
+                    kd*(linear_velocity - curr_velocity) +
+                    ki*delta_time*(pose.translation() - curr_pose.translation());
+        return m*a; // f = m * a
 	}
 
 	void getPoseAndVelocity(SE3Type & pose, Vector3 & linear_velocity) {
-
 		if (use_ground_thruth_data) {
 			pose = ground_truth_pose;
 			linear_velocity = ground_truth_linear_velocity;
-
 		} else {
 
 		}
@@ -150,8 +169,8 @@ public:
 		use_ground_thruth_data = false;
 
 		// ========= Constants ===================================//
-		g = 9.8;
-		m = 1.55;
+        g = 9.8; // in rate_controller g = 9.81
+        m = 1.55; // in rate_controller m = 1.56779
 		initial_state_covariance = Matrix15::Identity() * 0.001;
 		gyro_noise = Matrix3::Identity() * 0.0033937;
 		accel_noise = Matrix3::Identity() * 0.04;
@@ -167,7 +186,8 @@ public:
 		T_imu_cam.setQuaternion(q);
 		T_imu_cam.translation() << 0.03, -0.07, 0.1;
 
-
+        // set desired position
+        setDesiredPose(SE3Type(SO3Type::exp(Vector3(0,0,0)),Vector3(0,0,1)));
 
 		// Init subscribers and publishers
 		imu_sub = nh.subscribe("imu", 10, &UAVController<_Scalar>::imuCallback,
@@ -193,15 +213,25 @@ public:
 			ROS_FATAL("could not wake up gazebo");
 			exit(-1);
 		}
-
 	}
 
 	~UAVController() {
 	}
 
+    // exercise 1 e)
 	void sendControlSignal() {
+        // TODO: implement
+        SE3Type curr_pose;
+        Vector3 curr_velocity;
+        Vector3 desired_velocity = Vector3(0,0,0);
 
-	}
+        double delta_time = 0.001d; // ?
+
+        getPoseAndVelocity(curr_pose, curr_velocity);
+        Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
+
+        command_pub.publish( computeCommandFromForce(dforce, desired_pose /*?*/, delta_time) );
+    }
 
 
 	void setDesiredPose(const SE3Type & p) {
@@ -209,7 +239,6 @@ public:
 	}
 
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
 };
 
 #endif /* UAV_CONTROLLER_H_ */
