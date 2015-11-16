@@ -1,4 +1,4 @@
-// This source code is intended for use in the teaching course "Vision-Based Navigation" at Technical University Munich only. 
+// This source code is intended for use in the teaching course "Vision-Based Navigation" at Technical University Munich only.
 // Copyright 2015 Robert Maier, Joerg Stueckler, Technical University Munich
 
 #include <dvo.h>
@@ -552,142 +552,150 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
-	Eigen::MatrixXf T = Sophus::SE3f::exp(xi);
-	Eigen::Matrix3f R(3,3);
-	Eigen::Vecor3f t(3,1);
+    Eigen::MatrixXf T = Sophus::SE3f::log(Sophus::SE3f::exp(xi));
+    Eigen::Matrix3f R(3,3);
+    Eigen::Vector3f t(3,1);
 
-	for( int i = 0; i<3 ; i++)
-	{
-		for(int j=0;j<3;j++)
-		{
-			R[i][j] = T[i][j];
-		}
-		t[i] = T[i][3];
-	}
 
-	Eigen::MatrixXf RKInv = R * K.inverse();
+    for( int i = 0; i<3 ; i++)
+    {
+        for(int j=0;j<3;j++)
+        {
+            R(i,j) = T(i,j);
+        }
+        t(i) = T(i,3);
+    }
 
-	/*
-	 warp pixels into other image, save intermediate results
-	 these contain the x,y image coordinates of the respective
-	 reference-pixel, transformed & projected into the new image.
-	*/
-	cv::Mat xImg,yImg,xp,yp,zp;
-	xImg = cv::zeros(cv::Size(grayRef))-10;
-	yImg = cv::zeros(cv::Size(grayRef))-10;
+    Eigen::MatrixXf RKInv = R * K.inverse();
 
-	// these contain the 3d position of the transformed point
-	xp = cv::NaN(cv::size(grayRef));
-	yp = cv::NaN(cv::size(grayRef));
-	zp = cv::NaN(cv::size(grayRef));
+    /*
+     warp pixels into other image, save intermediate results
+     these contain the x,y image coordinates of the respective
+     reference-pixel, transformed & projected into the new image.
+    */
+    cv::Mat xImg,yImg,xp,yp,zp;
+    xImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
+    yImg = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
 
-	Eigen::Vector3f tempVec(3,1);
-	Eigen::Vecor3f p(3,1);
-	Eigen::Vecor3f pTrans(3,1);
-	Eigen::Vecor3f pTransProj(3,1);
-		
-	for (int x = 0; x < grayRef.cols; x++)
-	{
-		for (int y=0; y < grayRef.rows ; y++) 
-		{
-			tempVec << x,y,1;
-			p = tempVec * DRef[y][x];
-			
-			// transform to image (unproject, rotate & translate)
-			pTrans = RKInv * p + t;
-			
-			// if point is valid (depth > 0), project and save result.
-			if(pTrans[2] > 0 && DRef(y,x) > 0){
-				// projected point (for interpolation of intensity and gradients)
-				pTransProj = K * pTrans;
-				xImg[y][x] = pTransProj[0] / pTransProj[2];
-				yImg[y][x] = pTransProj[0] / pTransProj[2];
-				
-				// warped 3d point, for calculation of Jacobian.
-				xp[y][x] = pTrans[0];
-				yp[y][x] = pTrans[1];
-				zp[y][x] = pTrans[2];
-			}
-		}
-	}
 
-	/*
-	 calculate actual derivative.
-	 */
-	// 1.: calculate image derivatives, and interpolate at warped positions.
-	cv::Mat dxCurr,dyCurr,dxInterpolated,dyInterpolated;
-	dxCurr = cv::zeros(cv::Size(grayCur));
-	dyCurr = cv::zeros(cv::Size(grayCur));
 
-	dxInterpolated = cv::zeros(cv::Size(grayCur));
-	dyInterpolated = cv::zeros(cv::Size(grayCur));
+    // these contain the 3d position of the transformed point
+    xp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
+    yp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
+    zp = cv::Mat::zeros(grayRef.rows, grayRef.cols, grayRef.type());
 
-	int width = dxCurr.cols;
-	int height = dxCurr.rows;
+    Eigen::Vector3f tempVec(3,1);
+    Eigen::Vector3f p(3,1);
+    Eigen::Vector3f pTrans(3,1);
+    Eigen::Vector3f pTransProj(3,1);
 
-	for( int y_index = 1; y_index < height-1 ; y_index++ ){
-		for (int x_index = 0; x_index < width; x_index++)
-		{
-			dyCurr[y_index][x_index] = 0.5*(grayCur[y_index+1][x_index] - grayCur[y_index-1][x_index];
-		}
-	}
 
-	for (int x_index = 1; x_index < width - 1; x_index++){
-		for( int y_index = 0; y_index < height ; y_index++ )
-		{
-			dyCurr[y_index][x_index] = 0.5*(grayCur[y_index][x_index+1] - grayCur[y_index][x_index-1];
-		}
-	}
+    for (int x = 0; x < grayRef.cols; x++)
+    {
+        for (int y=0; y < grayRef.rows ; y++)
+        {
+            tempVec << x,y,1;
+            p = tempVec * depthRef.at<double>(y,x);
 
-	//TODO: Check interpolation
-	for( int y_index = 0; y_index < height ; y_index++ )
-	{
-		for (int x_index = 0; x_index < width; x_index++)
-		{
-		
-		dxInterpolated[y_index][x_index] = K[0][0] * interpolate(dxCurr,xImg[y_index][x_index]+1,yImg[y_index][x_index]+1,width,height);
-		dyInterpolated[y_index][x_index] = K[1][1] * interpolate(dyCurr,xImg[y_index][x_index]+1,yImg[y_index][x_index]+1,width,height);
-		
-		}
+            // transform to image (unproject, rotate & translate)
+            pTrans = RKInv * p + t;
 
-	}
+            // if point is valid (depth > 0), project and save result.
+            if(pTrans(2) > 0 && depthRef.at<double>(y,x) > 0){
+                // projected point (for interpolation of intensity and gradients)
+                pTransProj = K * pTrans;
 
-	/* Matlab interpolation sample
-	dxInterp = K(1,1) * reshape(interp2(dxI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
-	dyInterp = K(2,2) * reshape(interp2(dyI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
-	*/
+                xImg.at<double>(y,x) = pTransProj(0) / pTransProj(2);
+                yImg.at<double>(y,x) = pTransProj(1) / pTransProj(2);
 
-	/* 
-	TODO: Check this.... Maybe Not required
-	// 2.: get warped 3d points (x', y', z')
+                // warped 3d point, for calculation of Jacobian.
+                xp.at<double>(y,x) = pTrans(0);
+                yp.at<double>(y,x) = pTrans(1);
+                zp.at<double>(y,x) = pTrans(2);
 
-	xp = reshape(xp,xp.rows * xp.cols,1);
-	yp = reshape(yp,size(I,1) * size(I,2),1);
-	zp = reshape(zp,size(I,1) * size(I,2),1);
-	*/
+            }
 
-	// 3. direct implementation of kerl2012msc.pdf Eq. (4.14):
-	int width = dxCurr.cols;
-	int height = dxCurr.rows;
+        }
+    }
 
-	Jac = cv::zeros(height,width,6);
 
-	for( int y = 0; y < height ; y++ )
-	{
-		for (int x = 0; x < width; x++)
-		{
-			Jac[y][x][0] = dxInterpolated[y][x] / zp[y][x];
-			Jac[y][x][1] = dyInterpolated[y][x] / zp[y][x];
-			Jac[y][x][2] = -(dxInterpolated[y][x]*xp[y][x] + dyInterpolated[y][x]*yp[y][x]) / (zp[y][x]*zp[y][x]);
-			Jac[y][x][3] = - (dxInterpolated[y][x]*xp[y][x]*yp[y][x])/(zp[y][x]*zp[y][x]) - dyInterpolated[y][x]*(1+(yp[y][x]/zp[y][x])*(yp[y][x]/zp[y][x]));
-			Jac[y][x][4] = dxInterpolated[y][x]*(1+(xp[y][x]/zp[y][x])(xp[y][x]/zp[y][x])) + (dyInterpolated[y][x]*xp[y][x]*yp[y][x])/(zp[y][x]*zp[y][x]);
-			Jac[y][x][5] = (- dxInterpolated[y][x] * yp[y][x] + dyInterpolated * xp[y][x]) / zp[y][x];
-			
-		}
-	}
-	// invert jacobian: in kerl2012msc.pdf, the difference is defined the other
-	// way round, see (4.6).
-	Jac = -Jac;
+    /*
+     calculate actual derivative.
+     */
+    // 1.: calculate image derivatives, and interpolate at warped positions.
+    cv::Mat dxCurr,dyCurr,dxInt,dyInt;
+    dxCurr = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
+    dyCurr = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
+
+    dxInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
+    dyInt = cv::Mat::zeros(grayCur.rows, grayCur.cols, grayCur.type());
+
+    const float* ptrdxCurr = (const float*)dxCurr.data;
+    const float* ptrdyCurr = (const float*)dyCurr.data;
+
+    int width = dxCurr.cols;
+    int height = dxCurr.rows;
+
+    for( int y = 1; y < height-1 ; y++ ){
+        for (int x = 0; x < width; x++)
+        {
+            dyCurr.at<double>(y,x) = 0.5*(grayCur.at<double>(y+1,x) - grayCur.at<double>(y-1,x));
+        }
+    }
+
+    for (int x = 1; x < width - 1; x++){
+        for( int y = 0; y < height ; y++ )
+        {
+            dyCurr.at<double>(y,x) = 0.5*(grayCur.at<double>(y,x+1) - grayCur.at<double>(y,x-1));
+        }
+    }
+    //TODO: Check interpolation
+    for( int y = 0; y < height ; y++ )
+    {
+        for (int x = 0; x < width; x++)
+        {
+
+        dxInt.at<double>(y,x) = K(0,0) * interpolate(ptrdxCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
+        dyInt.at<double>(y,x) = K(1,1) * interpolate(ptrdyCurr,xImg.at<float>(y,x)+1,yImg.at<float>(y,x)+1,width,height);
+
+        }
+
+    }
+
+    /* Matlab interpolation sample
+    dxInterp = K(1,1) * reshape(interp2(dxI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
+    dyInterp = K(2,2) * reshape(interp2(dyI, xImg+1, yImg+1),size(I,1) * size(I,2),1);
+    */
+
+    /*
+    TODO: Check this.... Maybe Not required
+    // 2.: get warped 3d points (x', y', z')
+
+    xp = reshape(xp,xp.rows * xp.cols,1);
+    yp = reshape(yp,size(I,1) * size(I,2),1);
+    zp = reshape(zp,size(I,1) * size(I,2),1);
+    */
+
+    // 3. direct implementation of kerl2012msc.pdf Eq. (4.14):
+    width = dxCurr.cols;
+    height = dxCurr.rows;
+
+    for( int y = 0; y < height ; y++ )
+    {
+        for (int x = 0; x < width; x++)
+        {
+            J(y*width + x , 0) = dxInt.at<double>(y,x) / zp.at<double>(y,x);
+            J(y*width + x , 1) = dyInt.at<double>(y,x) / zp.at<double>(y,x);
+            J(y*width + x , 2) = -(dxInt.at<double>(y,x)*xp.at<double>(y,x) + dyInt.at<double>(y,x)*yp.at<double>(y,x)) / (zp.at<double>(y,x)*zp.at<double>(y,x));
+            J(y*width + x , 3) = - (dxInt.at<double>(y,x)*xp.at<double>(y,x)*yp.at<double>(y,x))/(zp.at<double>(y,x)*zp.at<double>(y,x)) - dyInt.at<double>(y,x)*(1+(yp.at<double>(y,x)/zp.at<double>(y,x))*(yp.at<double>(y,x)/zp.at<double>(y,x)));
+            J(y*width + x , 4) = + dxInt.at<double>(y,x)* (1 + (xp.at<double>(y,x) / zp.at<double>(y,x))*(xp.at<double>(y,x) / zp.at<double>(y,x))) + (dyInt.at<double>(y,x)*xp.at<double>(y,x)* yp.at<double>(y,x))/(zp.at<double>(y,x)*zp.at<double>(y,x));
+            J(y*width + x , 5) = (- dxInt.at<double>(y,x)* yp.at<double>(y,x) + dyInt.at<double>(y,x)*xp.at<double>(y,x))/ zp.at<double>(y,x);
+        }
+    }
+    // invert jacobian: in kerl2012msc.pdf, the difference is defined the other
+    // way round, see (4.6).
+    J = -J;
+
 
 }
 
