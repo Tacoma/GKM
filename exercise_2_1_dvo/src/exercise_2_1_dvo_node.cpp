@@ -30,9 +30,10 @@ cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
 boost::shared_ptr<tf::TransformBroadcaster> tf_broadcaster_; // pointer to delay creation 
 boost::shared_ptr<tf::TransformListener> tf_listener_;
-tf::StampedTransform integrated_transform_;
+tf::StampedTransform tf_integrated_transform_;
+Eigen::Matrix4f integrated_transform_ = Eigen::Matrix4f::Identity();
 bool isFirstIter_ = true;
-std::string cam_ref_tf_name = "/openni_rgb_optical_frame";
+std::string cam_ref_tf_name_ = "/openni_rgb_optical_frame";
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -112,6 +113,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
 //    cv::waitKey(10);
     
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
+    //transform = transform.inverse();
     
     cv::Mat grayCurInt;
     cv::cvtColor( img_rgb_cv_ptr->image.clone(), grayCurInt, CV_BGR2GRAY);
@@ -134,44 +136,46 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     // TODO: dump trajectory for evaluation / integrated_transform
     // get ground truth  in first iteration
     if (isFirstIter_) {
-      isFirstIter_ = false;
-      // get tf
-      try{
-	tf_listener_->lookupTransform("/world", cam_ref_tf_name, ros::Time(0), integrated_transform_);
-      }
-      catch (tf::TransformException ex){
-	ROS_ERROR("%s",ex.what());
-      }
+        isFirstIter_ = false;
+        // get tf
+        try{
+            tf_listener_->lookupTransform("/world", cam_ref_tf_name_, ros::Time(0), tf_integrated_transform_);
+        }
+            catch (tf::TransformException ex){
+            ROS_ERROR("%s",ex.what());
+        }
+        // TODO: save tf::StampedTransform tf_integrated_transform_ in Eigen::Matrix4f integrated_transform_
     }
-    
-    // convert and broadcast tf frame
-    tf::Transform tf;
-    tf::Vector3 origin;
-    origin.setValue(transform(0,3), transform(1,3), transform(2,3));
-    tf::Matrix3x3 rot;
-    rot.setValue( transform(0,0), transform(0,1), transform(0,2),
-                  transform(1,0), transform(1,1), transform(1,2),
-                  transform(2,0), transform(2,1), transform(2,2));
-
-    tf::Quaternion tfqt;
-    rot.getRotation(tfqt);
-
-    tf.setOrigin(origin);
-    tf.setRotation(tfqt);
-    
-    integrated_transform_ *= tf;
+        
+    integrated_transform_ = integrated_transform_ * transform.inverse();
     
     pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud = pcl::PointCloud< pcl::PointXYZRGB >::Ptr( new pcl::PointCloud< pcl::PointXYZRGB > );
     imagesToPointCloud( img_rgb_cv_ptr->image, img_depth_cv_ptr->image, cloud );
     
     cloud->header = pcl_conversions::toPCL( image_rgb->header );
     
-    cloud->header.frame_id = cam_ref_tf_name;
-//    cloud->header.frame_id = "/world";
-//    pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
+//    cloud->header.frame_id = "/odometry";\
+//    cloud->header.frame_id = cam_ref_tf_name_;
+    cloud->header.frame_id = "/world";
+    pcl::transformPointCloud( *cloud, *cloud, integrated_transform_ );
         
-    pub_pointcloud.publish( *cloud );   
-    tf_broadcaster_->sendTransform(tf::StampedTransform(integrated_transform_, ros::Time::now(), "world", "odometry"));
+    pub_pointcloud.publish( *cloud );
+
+    // convert and broadcast integrated_tf
+    tf::Vector3 origin;
+    origin.setValue(integrated_transform_(0,3), integrated_transform_(1,3), integrated_transform_(2,3));
+    tf::Matrix3x3 rot;
+    rot.setValue( integrated_transform_(0,0), integrated_transform_(0,1), integrated_transform_(0,2),
+                  integrated_transform_(1,0), integrated_transform_(1,1), integrated_transform_(1,2),
+                  integrated_transform_(2,0), integrated_transform_(2,1), integrated_transform_(2,2));
+
+    tf::Quaternion tfqt;
+    rot.getRotation(tfqt);
+
+    tf_integrated_transform_.setOrigin(origin);
+    tf_integrated_transform_.setRotation(tfqt);
+
+    tf_broadcaster_->sendTransform(tf::StampedTransform(tf_integrated_transform_, ros::Time::now(), "world", "odometry"));
 }
 
 int main(int argc, char** argv)

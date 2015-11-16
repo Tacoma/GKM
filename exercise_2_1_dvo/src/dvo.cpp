@@ -696,7 +696,6 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     // way round, see (4.6).
     J = -J;
 
-
 }
 
 // TODO: test
