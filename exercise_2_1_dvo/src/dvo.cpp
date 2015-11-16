@@ -552,19 +552,9 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
-    Eigen::MatrixXf T = Sophus::SE3f::log(Sophus::SE3f::exp(xi));
-    Eigen::Matrix3f R(3,3);
-    Eigen::Vector3f t(3,1);
-
-
-    for( int i = 0; i<3 ; i++)
-    {
-        for(int j=0;j<3;j++)
-        {
-            R(i,j) = T(i,j);
-        }
-        t(i) = T(i,3);
-    }
+    Eigen::Matrix3f R;
+    Eigen::Vector3f t;
+    convertSE3ToTf(xi, R, t);
 
     Eigen::MatrixXf RKInv = R * K.inverse();
 
@@ -695,7 +685,6 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     // invert jacobian: in kerl2012msc.pdf, the difference is defined the other
     // way round, see (4.6).
     J = -J;
-
 }
 
 // TODO: test
@@ -765,7 +754,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     ROS_INFO_STREAM("R = " << rot << std::endl);
     
 
-    bool useNumericDerivative = true;
+    bool useNumericDerivative = false;
     
     bool useGN = true;
     bool useGD = false;
