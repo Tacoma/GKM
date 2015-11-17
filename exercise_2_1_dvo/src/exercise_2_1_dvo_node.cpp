@@ -113,7 +113,6 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
 //    cv::waitKey(10);
     
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
-    //transform = transform.inverse();
     
     cv::Mat grayCurInt;
     cv::cvtColor( img_rgb_cv_ptr->image.clone(), grayCurInt, CV_BGR2GRAY);
