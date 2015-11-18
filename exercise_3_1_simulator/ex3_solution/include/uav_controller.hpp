@@ -73,6 +73,9 @@ private:
 
 	mav_msgs::CommandAttitudeThrust command;
 
+    // debug
+    Vector3 position_integral;
+
 	void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
 		Eigen::Vector3d accel_measurement, gyro_measurement;
 		tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
@@ -110,19 +113,17 @@ private:
 		SE3Type pose(orientation, position);
 	}
 
-    // exercise 1 d)
+    // TODO: exercise 1 d)
 	mav_msgs::CommandAttitudeThrust computeCommandFromForce(
 			const Vector3 & control_force, const SE3Type & pose,
 			double delta_time) {
-        // TODO: implement
-        float yaw = 0.5f; // ?
+        float yaw = 0.f;
         // f = m * a    ==>     a = f / m
         Vector3 a = control_force/m;
         float roll =  1.0f/g * (a.x()*sin(yaw) - a.y()*cos(yaw));
         float pitch = 1.0f/g * (a.x()*cos(yaw) + a.y()*sin(yaw));
         float thrust = a.z() + m*g;
 
-        // mav_msgs::CommandAttitudeThrust_(roll, pitch, yaw, thrust)
         mav_msgs::CommandAttitudeThrust msg;
         msg.roll = roll;    // [rad]
         msg.pitch = pitch;  // [rad]
@@ -131,25 +132,26 @@ private:
         return msg;
 	}
 
-    // exercise 1 c)
+    // TODO: exercise 1 c)
 	Vector3 computeDesiredForce(const SE3Type & pose, const Vector3 & linear_velocity,
 			double delta_time) {
-        // TODO: implement
         SE3Type curr_pose;
         Vector3 curr_velocity;
         getPoseAndVelocity(curr_pose, curr_velocity);
 
-        float kp = 1.0f; // proportional gains of the PID controller
-        float kd = 1.0f; // differential gains of the PID controller
-        float ki = 1.0f; // integral gains of the PID controller
+        const float kp = 4.0f; // proportional gains of the PID controller
+        const float kd = 4.0f; // differential gains of the PID controller
+        const float ki = 8.0f; // integral gains of the PID controller
 
         // x'' = kp*(xd-x) + kd*(xd'-x') + ki*integral(xd-x, delta_time)
+        position_integral += delta_time*(pose.translation() - curr_pose.translation());
         Vector3 a = kp*(pose.translation() - curr_pose.translation()) +
                     kd*(linear_velocity - curr_velocity) +
-                    ki*delta_time*(pose.translation() - curr_pose.translation());
+                    ki*position_integral;
         return m*a; // f = m * a
 	}
 
+    // TODO: exercise 1 b)
 	void getPoseAndVelocity(SE3Type & pose, Vector3 & linear_velocity) {
 		if (use_ground_thruth_data) {
 			pose = ground_truth_pose;
@@ -164,9 +166,10 @@ public:
 	typedef boost::shared_ptr<UAVController> Ptr;
 
 	UAVController(ros::NodeHandle & nh) :
-		 ground_truth_time(0) {
+         ground_truth_time(0),
+         position_integral(0,0,0){
 
-		use_ground_thruth_data = false;
+        use_ground_thruth_data = true;
 
 		// ========= Constants ===================================//
         g = 9.8; // in rate_controller g = 9.81
@@ -185,9 +188,6 @@ public:
 		Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
 		T_imu_cam.setQuaternion(q);
 		T_imu_cam.translation() << 0.03, -0.07, 0.1;
-
-        // set desired position
-        setDesiredPose(SE3Type(SO3Type::exp(Vector3(0,0,0)),Vector3(0,0,1)));
 
 		// Init subscribers and publishers
 		imu_sub = nh.subscribe("imu", 10, &UAVController<_Scalar>::imuCallback,
@@ -218,9 +218,8 @@ public:
 	~UAVController() {
 	}
 
-    // exercise 1 e)
+    // TODO: exercise 1 e)
 	void sendControlSignal() {
-        // TODO: implement
         SE3Type curr_pose;
         Vector3 curr_velocity;
         Vector3 desired_velocity = Vector3(0,0,0);
@@ -230,7 +229,8 @@ public:
         getPoseAndVelocity(curr_pose, curr_velocity);
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
 
-        command_pub.publish( computeCommandFromForce(dforce, desired_pose /*?*/, delta_time) );
+        command = computeCommandFromForce(dforce, desired_pose, delta_time);
+        command_pub.publish(command);
     }
 
 
