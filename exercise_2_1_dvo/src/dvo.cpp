@@ -490,6 +490,13 @@ void calculateMeanStdDev(const Eigen::VectorXf &residuals, float &mean, float &s
 }
 
 
+void calculateCovariance(const Eigen::Matrix<float, -1, 6>& J, Eigen::Matrix<float,6,6>& covariance)
+{
+    Eigen::Matrix<float, 6, -1> Jt = J.transpose();
+    covariance = (Jt*J).inverse();
+}
+
+
 void weighting(Eigen::VectorXf &residuals, Eigen::VectorXf &weights)
 {
     int n = residuals.size();
