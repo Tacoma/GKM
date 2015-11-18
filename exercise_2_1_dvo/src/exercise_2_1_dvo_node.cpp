@@ -18,7 +18,6 @@
 #include <pcl_ros/transforms.h>
 #include <pcl/common/transforms.h>
 
-#include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
 
 #include <dvo.h>
@@ -34,6 +33,7 @@ tf::StampedTransform tf_integrated_transform_;
 Eigen::Matrix4f integrated_transform_ = Eigen::Matrix4f::Identity();
 bool isFirstIter_ = true;
 std::string cam_ref_tf_name_ = "/openni_rgb_optical_frame";
+
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -175,6 +175,8 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     tf_integrated_transform_.setRotation(tfqt);
 
     tf_broadcaster_->sendTransform(tf::StampedTransform(tf_integrated_transform_, ros::Time::now(), "world", "odometry"));
+
+    saveTrajectory("test.txt", tf_integrated_transform_, image_depth->header.stamp.toSec());    
 }
 
 int main(int argc, char** argv)
@@ -204,7 +206,7 @@ int main(int argc, char** argv)
 
     loop_rate.sleep();
   }
-
+  
   return 0;
 }
 

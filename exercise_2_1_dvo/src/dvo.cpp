@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 
+
 // #ifndef WIN64
 //     #define EIGEN_DONT_ALIGN_STATICALLY
 // #endif
@@ -46,7 +47,6 @@ void convertTfToSE3(const Eigen::Matrix3f &rot, const Eigen::Vector3f &t, Eigen:
     Sophus::SE3f se3(rot, t);
     xi = Sophus::SE3f::log(se3);
 }
-
 
 
 cv::Mat downsampleGray(const cv::Mat &gray)
@@ -219,7 +219,7 @@ bool savePlyFile(const std::string &filename, const std::vector<Eigen::Vector3f>
 
 
 bool savePlyFile(const std::string &filename, const cv::Mat &color, const cv::Mat &vertexMap)
-{
+    {
     // convert frame to points vector and colors vector
     std::vector<Eigen::Vector3f> pts;
     std::vector<Eigen::Vector3f> colors;
@@ -238,6 +238,27 @@ bool savePlyFile(const std::string &filename, const cv::Mat &color, const cv::Ma
     }
     
     return savePlyFile(filename, pts, colors);
+}
+
+
+bool saveTrajectory(const std::string &filename, const tf::StampedTransform transform, const float timestamp) {
+    
+    std::ofstream file;
+    file.open(filename.c_str(), std::ios::out | std::ios::app | std::ios::binary);
+    if (!file.is_open()) {
+	ROS_ERROR_STREAM("Error opening " << filename << ".");
+	return false;
+    }
+
+    tf::Quaternion R = transform.getRotation();
+    tf::Vector3 t = transform.getOrigin();
+    file << std::fixed << std::setprecision( 6 ) << timestamp << " ";
+    file << t.x() << " " << t.y() << " " << t.z() << " " << R.x() << " " << R.y() << " " << R.z() << " " << R.w();
+    file << std::endl;
+
+    file.close();    
+    
+    return true;
 }
 
 
@@ -698,7 +719,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     ROS_INFO_STREAM("R = " << rot << std::endl);
     
 
-    bool useNumericDerivative = false;
+    bool useNumericDerivative = true;
     
     bool useGN = true;
     bool useGD = false;
