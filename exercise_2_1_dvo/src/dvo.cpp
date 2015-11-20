@@ -16,6 +16,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -25,6 +26,9 @@
 
 #include "ros/ros.h"
 
+
+visualization_msgs::Marker marker;
+geometry_msgs::PoseWithCovarianceStamped msg;
 
 #define STR1(x)  #x
 #define STR(x)  STR1(x)
@@ -543,7 +547,7 @@ void weighting(Eigen::VectorXf &residuals, Eigen::VectorXf &weights)
 }
 
 
-// TODO: test
+// TODO: exercise 2 a)
 void deriveNumeric( const cv::Mat &grayRef, const cv::Mat &depthRef,
                     const cv::Mat &grayCur, const cv::Mat &depthCur,
                     const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
@@ -573,7 +577,7 @@ void deriveNumeric( const cv::Mat &grayRef, const cv::Mat &depthRef,
 }
 
 
-// TODO: compile and test
+// TODO: exercise 2 b)
 void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const cv::Mat &grayCur, const cv::Mat &depthCur,
                    const cv::Mat &gradX, const cv::Mat &gradY,
@@ -634,21 +638,17 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                 yp = pTrans(1);
                 zp = pTrans(2);
 
+                dxInt = K(0,0) * gradX.at<double>(y,x);
+                dyInt = K(1,1) * gradY.at<double>(y,x);
 
+                J(y*width + x , 0) = dxInt / zp;
+                J(y*width + x , 1) = dyInt / zp;
+                J(y*width + x , 2) = -(dxInt*xp + dyInt*yp) / (zp*zp);
+                J(y*width + x , 3) = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
+                J(y*width + x , 4) = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
+                J(y*width + x , 5) = (- dxInt* yp + dyInt*xp)/ zp;
 
-
-            dxInt = K(0,0) * gradX.at<double>(y,x);
-            dyInt = K(1,1) * gradY.at<double>(y,x);
-
-            J(y*width + x , 0) = dxInt / zp;
-            J(y*width + x , 1) = dyInt / zp;
-            J(y*width + x , 2) = -(dxInt*xp + dyInt*yp) / (zp*zp);
-            J(y*width + x , 3) = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
-            J(y*width + x , 4) = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
-            J(y*width + x , 5) = (- dxInt* yp + dyInt*xp)/ zp;
-
-            //residuals(y*width + x) = grayRef.at<double>(x,y) - grayCur.at<double>(x,y);
-
+                //residuals(y*width + x) = grayRef.at<double>(x,y) - grayCur.at<double>(x,y);
             }
         }
     }
@@ -657,6 +657,18 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     J = -J;
 //    deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, K, residuals, J);
 
+}
+
+
+// TODO: exercise 2 e)
+visualization_msgs::Marker getMarker()
+{
+    return marker;
+}
+
+geometry_msgs::PoseWithCovarianceStamped getMsg()
+{
+    return msg;
 }
 
 // TODO: test
@@ -741,6 +753,8 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     Vec6f delta;
     
     float tmr = (float)cv::getTickCount();
+
+    Mat6f covariance;
     // Iterate pyramids
     for (int level = maxLevel; level >= minLevel; --level)
     {
@@ -765,12 +779,15 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
         {
             // compute residuals and Jacobian
             Eigen::VectorXf residuals;                          // 1 x n
-            Eigen::MatrixXf J(grayRef.rows * grayRef.cols, 6);  // n x 6 // maybe columns and rows have to be switched
+            Eigen::MatrixXf J(grayRef.rows * grayRef.cols, 6);  // n x 6
 
             if( useNumericDerivative )
               deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, kLevel, residuals, J);
             else
               deriveAnalytic(grayRef, depthRef, grayCur, depthCur, gradX, gradY, xi, kLevel, residuals, J);
+
+            // TODO: exercise 2 e)
+            calculateCovariance(J, covariance);
 
 #if DEBUG_OUTPUT
             // compute and show error image
@@ -876,8 +893,58 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     transform.block<3,3>(0,0) = rot;
     transform.block<3,1>(0,3) = t;
 
+    // TODO: exercise 2 e)
+    Eigen::Quaternionf q(rot);
 
-    
+    // compute eigenvalues and eigenvectors for sphere scale
+//    Eigen::EigenSolver<Eigen::MatrixXf> es(covariance, true);
+//    ROS_ERROR_STREAM("The eigenvalues of A are: " << es.eigenvalues().transpose());
+//    ROS_ERROR_STREAM("The matrix of eigenvectors is:" << "\n" << es.eigenvectors());
+
+//    Eigen::Vector3f scale = ;
+
+//    marker.header.frame_id = "odometry";
+//    marker.header.stamp = ros::Time();
+//    marker.ns = "marker_namespace";
+//    marker.id = 0;
+//    marker.type = visualization_msgs::Marker::SPHERE;
+//    marker.action = visualization_msgs::Marker::ADD;
+//    // translation
+//    marker.pose.position.x = 0; //t.x();
+//    marker.pose.position.y = 0; //t.y();
+//    marker.pose.position.z = 0; //t.z();
+//    // rotation
+//    marker.pose.orientation.x = q.x();
+//    marker.pose.orientation.y = q.y();
+//    marker.pose.orientation.z = q.z();
+//    marker.pose.orientation.w = q.w();
+//    // scale
+//    marker.scale.x = 2;
+//    marker.scale.y = 2;
+//    marker.scale.z = 2;
+//    // colors
+//    marker.color.r = 1.0;
+//    marker.color.g = 0.0;
+//    marker.color.b = 1.0;
+//    marker.color.a = 1.0;
+
+    msg.header.frame_id = "odometry";
+    msg.header.stamp = ros::Time::now();
+
+    msg.pose.pose.position.x = 0;
+    msg.pose.pose.position.y = 0;
+    msg.pose.pose.position.z = 0;
+
+    msg.pose.pose.orientation.x = q.x();
+    msg.pose.pose.orientation.y = q.y();
+    msg.pose.pose.orientation.z = q.z();
+    msg.pose.pose.orientation.w = q.w();
+
+    for(int i=0; i<36; i++)
+    {
+        msg.pose.covariance[i] = covariance.data()[i];
+    }
+
 #if DEBUG_OUTPUT
     //cv::waitKey(0);
 #endif

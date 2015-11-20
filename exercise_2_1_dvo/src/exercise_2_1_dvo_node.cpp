@@ -27,6 +27,9 @@
 
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
+ros::Publisher pub_vis_covariance;
+ros::Publisher pub_vis_covariance2;
+
 boost::shared_ptr<tf::TransformBroadcaster> tf_broadcaster_; // pointer to delay creation 
 boost::shared_ptr<tf::TransformListener> tf_listener_;
 tf::StampedTransform tf_integrated_transform_;
@@ -88,8 +91,6 @@ void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::
       p.rgb = * ( reinterpret_cast< float* > ( &rgb ) );
 
       idx++;
-
-
     }
   }
 
@@ -122,9 +123,12 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     cv::Mat depthCur = img_depth_cv_ptr->image.clone();
     
     
-    if( !grayRef.empty() )
-      alignImages( transform, grayRef, depthRef, grayCur, depthCur, cameraMatrix );
-    
+    if( !grayRef.empty() ) {
+        alignImages( transform, grayRef, depthRef, grayCur, depthCur, cameraMatrix );
+//        pub_vis_covariance.publish(getMarker());
+        pub_vis_covariance2.publish(getMsg());
+    }
+
     grayRef = grayCur.clone();
     depthRef = depthCur.clone();
 
@@ -140,7 +144,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
         try{
             tf_listener_->lookupTransform("/world", cam_ref_tf_name_, ros::Time(0), tf_integrated_transform_);
         }
-            catch (tf::TransformException ex){
+        catch (tf::TransformException ex){
             ROS_ERROR("%s",ex.what());
         }
         // TODO: save tf::StampedTransform tf_integrated_transform_ in Eigen::Matrix4f integrated_transform_
@@ -196,7 +200,8 @@ int main(int argc, char** argv)
   sync.registerCallback(boost::bind(&callback, _1, _2));
   
   pub_pointcloud = nh.advertise< pcl::PointCloud< pcl::PointXYZRGB > >( "pointcloud", 1 );
-  
+  pub_vis_covariance = nh.advertise<visualization_msgs::Marker>("visualization_marker", 0 );
+  pub_vis_covariance2 = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("covariance_marker", 0 );
 
   ros::Rate loop_rate(100);
 
