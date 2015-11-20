@@ -241,7 +241,7 @@ bool savePlyFile(const std::string &filename, const cv::Mat &color, const cv::Ma
 }
 
 
-bool saveTrajectory(const std::string &filename, const tf::StampedTransform transform, const float timestamp) {
+bool saveTrajectory(const std::string &filename, const tf::StampedTransform transform, const ros::Time timestamp) {
     
     std::ofstream file;
     file.open(filename.c_str(), std::ios::out | std::ios::app | std::ios::binary);
@@ -252,7 +252,7 @@ bool saveTrajectory(const std::string &filename, const tf::StampedTransform tran
 
     tf::Quaternion R = transform.getRotation();
     tf::Vector3 t = transform.getOrigin();
-    file << std::fixed << std::setprecision( 6 ) << timestamp << " ";
+    file << timestamp << " ";
     file << t.x() << " " << t.y() << " " << t.z() << " " << R.x() << " " << R.y() << " " << R.z() << " " << R.w();
     file << std::endl;
 
@@ -590,6 +590,7 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     Eigen::Vector3f tempVec(3,1);
     Eigen::Vector3f p(3,1);
     Eigen::Vector3f pTrans(3,1);
+    Eigen::Vector3f pTransProj(3,1);
 
 #if DEBUG_OUTPUT
     ROS_ERROR_STREAM( "t: " << t(0) << ","<< t(1) << "," << t(2) << "\n");
@@ -601,6 +602,18 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 
     int width = grayRef.cols;
     int height = grayRef.rows;
+    
+    for (int x = 0; x < width; x++) {
+	for (int y = 0; y < height; y++) {
+	    if (std::isnan(gradX.at<double>(y,x))) {
+		ROS_ERROR_STREAM("gradX is NAN");
+	    }
+	    if (std::isnan(gradY.at<double>(y,x))) {
+		ROS_ERROR_STREAM("gradY is NAN");
+	    }
+	}
+    }
+
 
     double dRef = 0.0;
     double J1 =0.0, J2=0.0, J3=0.0, J4=0.0, J5=0.0, J6=0.0;

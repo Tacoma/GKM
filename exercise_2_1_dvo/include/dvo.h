@@ -15,7 +15,7 @@
 
 void alignImages( Eigen::Matrix4f& transform, const cv::Mat& grayRef, const cv::Mat& depthRef, const cv::Mat& grayCur, const cv::Mat& depthCur, const Eigen::Matrix3f& cameraMatrix );
 
-bool saveTrajectory(const std::string &filename, const tf::StampedTransform transform, const float timestamp);
+bool saveTrajectory(const std::string &filename, const tf::StampedTransform transform, const ros::Time timestamp);
 
 #endif // DVO_H__
 
