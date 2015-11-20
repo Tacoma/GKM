@@ -596,15 +596,18 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     ROS_ERROR_STREAM( "R: " << R(0,0) << ","<< R(0,1) << "," << R(0,2) << "\n");
 #endif
 
-    double xp = 0;
-    double yp = 0;
-    double zp = 0;
-    double dxInt ,dyInt ;
+    double xp = 0.0, yp = 0.0, zp = 0.0;
+    double dxInt = 0.0, dyInt = 0.0;
 
     int width = grayRef.cols;
     int height = grayRef.rows;
-    double dRef;
-    residuals.resize(width*height);
+
+    double dRef = 0.0;
+    double J1 =0.0, J2=0.0, J3=0.0, J4=0.0, J5=0.0, J6=0.0;
+
+
+    J = Eigen::MatrixXf::Zero(width * height, 6);
+    residuals = calculateError(grayRef, depthRef, grayCur, depthCur, xi, K);
 
     for (int x = 0; x < width ; x++)
     {
@@ -613,7 +616,9 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 
             dRef = depthRef.at<double>(y,x);
 
-            p << x * dRef , y * dRef , dRef ;
+            if(!std::isnan(dRef) && dRef > 0.0 && dRef< 100.0)
+            {
+                p << x * dRef , y * dRef , dRef ;
 
 //            #if DEBUG_OUTPUT
 //                ROS_ERROR_STREAM( "P: " << p(0) << "\n");
@@ -624,37 +629,59 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 
 
 
+
             // if point is valid (depth > 0), project and save result.
-            if(dRef > 0 && dRef < 100)
-            {
+
                 // transform to image (unproject, rotate & translate)
                 pTrans = RKInv * p + t;
                 // warped 3d point, for calculation of Jacobian.
+
                 xp = pTrans(0);
                 yp = pTrans(1);
                 zp = pTrans(2);
 
 
+//                #if DEBUG_OUTPUT
+//                    ROS_ERROR_STREAM( "xP: " << xp << "\n");
+//                    ROS_ERROR_STREAM( "yP: " << yp << "\n");
+//                    ROS_ERROR_STREAM( "zP: " << zp << "\n");
+//                    ROS_ERROR_STREAM( "depth: " << dRef << "\n");
+//                #endif
 
 
-            dxInt = K(0,0) * gradX.at<double>(y,x);
-            dyInt = K(1,1) * gradY.at<double>(y,x);
+                if (!std::isnan(zp) && zp > 0.0 && zp < 100.0)
+                {
 
-            J(y*width + x , 0) = dxInt / zp;
-            J(y*width + x , 1) = dyInt / zp;
-            J(y*width + x , 2) = -(dxInt*xp + dyInt*yp) / (zp*zp);
-            J(y*width + x , 3) = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
-            J(y*width + x , 4) = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
-            J(y*width + x , 5) = (- dxInt* yp + dyInt*xp)/ zp;
+                    dxInt = K(0,0) * gradX.at<double>(y,x);
+                    dyInt = K(1,1) * gradY.at<double>(y,x);
 
-            //residuals(y*width + x) = grayRef.at<double>(x,y) - grayCur.at<double>(x,y);
+                    J1 = dxInt / zp;
+                    J2 = dyInt / zp;
+                    J3 = -(dxInt*xp + dyInt*yp) / (zp*zp);
+                    J4 = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
+                    J5 = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
+                    J6 = (- dxInt* yp + dyInt*xp)/ zp;
+
+//#if DEBUG_OUTPUT
+//    ROS_ERROR_STREAM("zp:" << zp << "J1: " << J1 << "J2"<< J2 << "J3" << J3 << "J4: " << J4 << "J5"<< J5 << "J6" << J6 << "\n");
+//#endif
+                    if (!std::isnan(J1) && !std::isnan(J2) && !std::isnan(J3) && !std::isnan(J4) && !std::isnan(J5) && !std::isnan(J6))
+                    {
+                        J(y*width + x , 0) = J1;
+                        J(y*width + x , 1) = J2;
+                        J(y*width + x , 2) = J3;
+                        J(y*width + x , 3) = J4;
+                        J(y*width + x , 4) = J5;
+                        J(y*width + x , 5) = J6;
+                    }
+                }
 
             }
         }
     }
 
-
     J = -J;
+
 //    deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, K, residuals, J);
 
 }
@@ -726,7 +753,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     ROS_INFO_STREAM("R = " << rot << std::endl);
     
 
-    bool useNumericDerivative = true;
+    bool useNumericDerivative = false;
     
     bool useGN = true;
     bool useGD = false;
