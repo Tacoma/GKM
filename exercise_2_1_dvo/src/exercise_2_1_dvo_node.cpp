@@ -37,6 +37,8 @@ Eigen::Matrix4f integrated_transform_ = Eigen::Matrix4f::Identity();
 bool isFirstIter_ = true;
 std::string cam_ref_tf_name_ = "/openni_rgb_optical_frame";
 
+int counter = 0;
+
 
 void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 ) {
 
@@ -100,7 +102,10 @@ void imagesToPointCloud( const cv::Mat& img_rgb, const cv::Mat& img_depth, pcl::
 
 void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::ImageConstPtr& image_depth)
 {
-  
+    counter++;
+    if (counter%1 != 0) { //take only every nth frame
+	return;
+    }
     Eigen::Matrix3f cameraMatrix;
     cameraMatrix <<    525.0, 0.0, 319.5,
                          0.0, 525.0, 239.5,
@@ -180,7 +185,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
 
     tf_broadcaster_->sendTransform(tf::StampedTransform(tf_integrated_transform_, ros::Time::now(), "world", "odometry"));
 
-    saveTrajectory("test.txt", tf_integrated_transform_, image_depth->header.stamp.toSec());    
+    saveTrajectory("test.txt", tf_integrated_transform_, image_rgb->header.stamp);    
 }
 
 int main(int argc, char** argv)
