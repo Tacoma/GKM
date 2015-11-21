@@ -25,7 +25,7 @@
 #include <sophus/se3.hpp>
 
 #include "ros/ros.h"
-
+#include <opencv2/core/eigen.hpp>
 
 visualization_msgs::Marker marker;
 geometry_msgs::PoseWithCovarianceStamped msg;
@@ -576,131 +576,75 @@ void deriveNumeric( const cv::Mat &grayRef, const cv::Mat &depthRef,
     }
 }
 
-
-// TODO: exercise 2 b)
 void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
                    const cv::Mat &grayCur, const cv::Mat &depthCur,
                    const cv::Mat &gradX, const cv::Mat &gradY,
                    const Eigen::VectorXf &xi, const Eigen::Matrix3f &K,
                    Eigen::VectorXf &residuals, Eigen::MatrixXf &J)
 {
-
-    Eigen::Matrix3f R;
-    Eigen::Vector3f t;
-    convertSE3ToTf(xi, R, t);
-
-    Eigen::MatrixXf RKInv = R * K.inverse();
-
-    Eigen::Vector3f tempVec(3,1);
-    Eigen::Vector3f p(3,1);
-    Eigen::Vector3f pTrans(3,1);
-    Eigen::Vector3f pTransProj(3,1);
-
-#if DEBUG_OUTPUT
-    ROS_ERROR_STREAM( "t: " << t(0) << ","<< t(1) << "," << t(2) << "\n");
-    ROS_ERROR_STREAM( "R: " << R(0,0) << ","<< R(0,1) << "," << R(0,2) << "\n");
-#endif
-
-    double xp = 0.0, yp = 0.0, zp = 0.0;
-    double dxInt = 0.0, dyInt = 0.0;
-
-    int width = grayRef.cols;
-    int height = grayRef.rows;
-    
-    for (int x = 0; x < width; x++) {
-	for (int y = 0; y < height; y++) {
-	    if (std::isnan(gradX.at<double>(y,x))) {
-		ROS_ERROR_STREAM("gradX is NAN");
-	    }
-	    if (std::isnan(gradY.at<double>(y,x))) {
-		ROS_ERROR_STREAM("gradY is NAN");
-	    }
-	}
-    }
-
-
-    double dRef = 0.0;
-    double J1 =0.0, J2=0.0, J3=0.0, J4=0.0, J5=0.0, J6=0.0;
-
-
-    J = Eigen::MatrixXf::Zero(width * height, 6);
     residuals = calculateError(grayRef, depthRef, grayCur, depthCur, xi, K);
 
-    for (int x = 0; x < width ; x++)
-    {
-        for (int y=0; y < height ; y++)
+    try{
+
+        Eigen::Matrix3f R;
+        Eigen::Vector3f t;
+        convertSE3ToTf(xi, R, t);
+        Eigen::Matrix3f RKInv = R * K.inverse();
+
+        Eigen::MatrixXf dxI(grayRef.rows, grayRef.cols);
+        Eigen::MatrixXf dyI(grayRef.rows, grayRef.cols);
+        cv::cv2eigen(gradX, dxI);
+        cv::cv2eigen(gradY, dyI);
+
+        dxI = K(0, 0) * dxI;
+        dyI = K(1, 1) * dyI;
+
+        int width = gradX.cols;
+        int height = gradY.rows;
+
+        J = Eigen::MatrixXf::Zero(width*height, 6);
+
+        for (int x = 0; x < width ; x++)
         {
-
-            dRef = depthRef.at<double>(y,x);
-
-            if(!std::isnan(dRef) && dRef > 0.0 && dRef< 100.0)
+            for (int y=0; y < height ; y++)
             {
-                p << x * dRef , y * dRef , dRef ;
+                float dRef = depthRef.at<float>(y, x);
 
-//            #if DEBUG_OUTPUT
-//                ROS_ERROR_STREAM( "P: " << p(0) << "\n");
-//                ROS_ERROR_STREAM( "P: " << p(1) << "\n");
-//                ROS_ERROR_STREAM( "P: " << p(2) << "\n");
-//                ROS_ERROR_STREAM( "depth: " << dRef << "\n");
-//            #endif
+                Eigen::Vector3f p(x * dRef , y * dRef , dRef);
+                Eigen::Vector3f pTrans = RKInv * p + t;
 
+                float proj_depth = pTrans(2, 0);
 
+                if (proj_depth > 0 && dRef > 0) {
 
+                    double XP = pTrans(0, 0);
+                    double YP = pTrans(1, 0);
+                    double ZP = pTrans(2, 0);
 
-            // if point is valid (depth > 0), project and save result.
+                    double dx = dxI(y, x);
+                    double dy = dyI(y, x);
 
-                // transform to image (unproject, rotate & translate)
-                pTrans = RKInv * p + t;
-                // warped 3d point, for calculation of Jacobian.
+                    J(y*width + x, 0) = dx / ZP;
+                    J(y*width + x, 1) = dy / ZP;
+                    J(y*width + x, 2) = -(dx * XP + dy * YP)
+                            / (ZP * ZP);
+                    J(y*width + x, 3) = -(dx * XP * YP)
+                            / (ZP * ZP
+                                    - dy * (1 +std::pow((double)(YP / ZP),2)));
+                    J(y*width + x, 4) = dx * (1 + std::pow((double)(XP / ZP),
+                            2)) + (dy * XP * YP) / (ZP*ZP);
+                    J(y*width + x, 5) = (-dx * YP + dy * XP) / ZP;
+                 }
+              }
+           }
 
-                xp = pTrans(0);
-                yp = pTrans(1);
-                zp = pTrans(2);
+        J = -J;
 
-                dxInt = K(0,0) * gradX.at<double>(y,x);
-                dyInt = K(1,1) * gradY.at<double>(y,x);
-
-//                #if DEBUG_OUTPUT
-//                    ROS_ERROR_STREAM( "xP: " << xp << "\n");
-//                    ROS_ERROR_STREAM( "yP: " << yp << "\n");
-//                    ROS_ERROR_STREAM( "zP: " << zp << "\n");
-//                    ROS_ERROR_STREAM( "depth: " << dRef << "\n");
-//                #endif
-
-
-                if (!std::isnan(zp) && zp > 0.0 && zp < 100.0)
-                {
-
-                    dxInt = K(0,0) * gradX.at<double>(y,x);
-                    dyInt = K(1,1) * gradY.at<double>(y,x);
-
-                    J1 = dxInt / zp;
-                    J2 = dyInt / zp;
-                    J3 = -(dxInt*xp + dyInt*yp) / (zp*zp);
-                    J4 = - (dxInt*xp*yp)/(zp*zp) - dyInt*(1+(yp/zp)*(yp/zp));
-                    J5 = + (dyInt*xp*yp)/(zp*zp) + dxInt*(1+(xp/zp)*(xp/zp));
-                    J6 = (- dxInt* yp + dyInt*xp)/ zp;
-
-//#if DEBUG_OUTPUT
-//    ROS_ERROR_STREAM("zp:" << zp << "J1: " << J1 << "J2"<< J2 << "J3" << J3 << "J4: " << J4 << "J5"<< J5 << "J6" << J6 << "\n");
-//#endif
-                    if (!std::isnan(J1) && !std::isnan(J2) && !std::isnan(J3) && !std::isnan(J4) && !std::isnan(J5) && !std::isnan(J6))
-                    {
-                        J(y*width + x , 0) = J1;
-                        J(y*width + x , 1) = J2;
-                        J(y*width + x , 2) = J3;
-                        J(y*width + x , 3) = J4;
-                        J(y*width + x , 4) = J5;
-                        J(y*width + x , 5) = J6;
-                    }
-                }
-            }
-        }
     }
-
-    J = -J;
-
-//    deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, K, residuals, J);
+    catch (std::exception& e)
+      {
+        ROS_ERROR("%s",e.what());
+      }
 
 }
 
