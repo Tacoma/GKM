@@ -599,8 +599,8 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
         dxI = K(0, 0) * dxI;
         dyI = K(1, 1) * dyI;
 
-        int width = gradX.cols;
-        int height = gradY.rows;
+        int width = grayRef.cols;
+        int height = grayRef.rows;
 
         J = Eigen::MatrixXf::Zero(width*height, 6);
 
