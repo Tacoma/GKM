@@ -80,6 +80,12 @@ private:
     Vector3 position_integral[INTEGRAL_RING_BUFFER_SIZE];
     unsigned int integral_idx;
 
+    /**
+     * @brief send a new control signal every time new gyro and acceleration measurements arrive
+     * TODO: does not use imu measurements
+     * 
+     * @param msg the new imu message
+     */
     void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
         Eigen::Vector3d accel_measurement, gyro_measurement;
         tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
@@ -88,6 +94,14 @@ private:
         sendControlSignal();
     }
 
+    /**
+     * @brief saves the ground_truth pose and velocity in global variables
+     * 
+     * @param msg
+     * @return ground_truth_pose current pose
+     * @return ground_truth_linear_velocity current velocity
+     * @return ground_truth_time current time
+     */
     void groundTruthPoseCallback(
         const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
         Eigen::Quaterniond orientation;
@@ -106,6 +120,11 @@ private:
         ground_truth_time = msg->header.stamp.toSec();
     }
 
+    /**
+     * @brief TODO: fuse pose and imu information
+     * 
+     * @param msg PoseWithCovarianceStampedConstPtr message
+     */
     void pose1Callback(
         const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
         Eigen::Quaterniond orientation;
@@ -118,6 +137,12 @@ private:
     }
 
     // TODO: exercise 1 d)
+    /**
+     *  @brief calculates the attitude and thrust from the desired control force
+     * 
+     *  @param control_force the desired force, that the rotors should apply
+     *  @return the CommandAttitudeThrust message 
+     */
     mav_msgs::CommandAttitudeThrust computeCommandFromForce(
         const Vector3 & control_force, const SE3Type & pose,
         double delta_time) {
@@ -137,6 +162,16 @@ private:
     }
 
     // TODO: exercise 1 c)
+    
+    /**
+     * @brief compute the desired force with a simply PID
+     * 
+     * @param curr_pose/curr_velocity gets current pose and velocity automatically
+     * @param pose desired position and orientation
+     * @param linear_velocity desired velocity
+     * @param delta_time timestep for the integration part of the PID
+     * @return the desired force
+     */
     Vector3 computeDesiredForce(const SE3Type & pose, const Vector3 & linear_velocity,
                                 double delta_time) {
         SE3Type curr_pose;
@@ -167,6 +202,13 @@ private:
     }
 
     // TODO: exercise 1 b)
+    
+    /**
+     * @brief returns the current pose and velocity (either ground truth or estimated)
+     * 
+     * @param pose return current pose
+     * @param linear_velocity return current velocity
+     */
     void getPoseAndVelocity(SE3Type & pose, Vector3 & linear_velocity) {
         if (use_ground_thruth_data) {
             pose = ground_truth_pose;
@@ -220,7 +262,7 @@ public:
             position_integral[i] = Vector3(0,0,0);
         }
 
-        // Wake up simulation, from this point on, you have 30s to initialize
+        // Wake up simulation, from this point on, you have a few seconds to initialize
         // everything and fly to the evaluation position (x=0m y=0m z=1m).
         ROS_INFO("Waking up simulation ... ");
         std_srvs::Empty srv;
@@ -238,14 +280,14 @@ public:
     }
 
     // TODO: exercise 1 e)
+    /**
+     * @brief calculates and publishes a CommandAttitudeThrust message from the desired_pose
+     */
     void sendControlSignal() {
-        SE3Type curr_pose;
-        Vector3 curr_velocity;
         Vector3 desired_velocity = Vector3(0,0,0);
 
         double delta_time = 0.001d; // TODO
 
-        getPoseAndVelocity(curr_pose, curr_velocity);
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
 
         command = computeCommandFromForce(dforce, desired_pose, delta_time);
