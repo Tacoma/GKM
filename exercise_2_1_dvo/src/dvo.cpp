@@ -585,58 +585,88 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
     residuals = calculateError(grayRef, depthRef, grayCur, depthCur, xi, K);
 
     try{
+	
+	int w = grayRef.cols;
+	int h = grayRef.rows;
+	
+	float fx = K(0,0);
+	float fy = K(1,1);
+	float cx = K(0, 2);
+	float cy = K(1, 2);
+	float fxInv = 1.0 / fx;
+	float fyInv = 1.0 / fy;
 
+	// convert SE3 to rotation matrix and translation vector
         Eigen::Matrix3f R;
         Eigen::Vector3f t;
         convertSE3ToTf(xi, R, t);
         Eigen::Matrix3f RKInv = R * K.inverse();
 
-        Eigen::MatrixXf dxI(grayRef.rows, grayRef.cols);
-        Eigen::MatrixXf dyI(grayRef.rows, grayRef.cols);
-        cv::cv2eigen(gradX, dxI);
-        cv::cv2eigen(gradY, dyI);
+	const float* ptrGradX = (const float*)gradX.data;
+	const float* ptrGradY = (const float*)gradY.data;
+	const float* ptrDepthRef = (const float*)depthRef.data;
 
-        dxI = K(0, 0) * dxI;
-        dyI = K(1, 1) * dyI;
+        J = Eigen::MatrixXf::Zero(w*h, 6);
 
-        int width = grayRef.cols;
-        int height = grayRef.rows;
-
-        J = Eigen::MatrixXf::Zero(width*height, 6);
-
-        for (int x = 0; x < width ; x++)
+        for (int y = 0; y < h ; y++)
         {
-            for (int y=0; y < height ; y++)
+            for (int x=0; x < w ; x++)
             {
-                float dRef = depthRef.at<float>(y, x);
+		size_t off = y*w + x;
+                float dRef = ptrDepthRef[y*w + x];
+		
+		if (dRef > 0.0f) {
 
-                Eigen::Vector3f p(x * dRef , y * dRef , dRef);
-                Eigen::Vector3f pTrans = RKInv * p + t;
+		    // Unproject points
+		    float x0 = (static_cast<float>(x) - cx) * fxInv;
+		    float y0 = (static_cast<float>(y) - cy) * fyInv;
+		    x0 = x0 * dRef;
+		    y0 = y0 * dRef;
+		    
+		    // transform reference 3d point into current frame
+		    // reference 3d point
+		    Eigen::Vector3f pt3Ref(x0, y0, dRef);
+		    Eigen::Vector3f pt3Cur = R * pt3Ref + t;
 
-                float proj_depth = pTrans(2, 0);
+		    if (pt3Cur[2] > 0.0f) {
+		    
+			// Project p into Current image
+			Eigen::Vector3f pt2CurH = K * pt3Cur;
+			float px = pt2CurH[0] / pt2CurH[2];
+			float py = pt2CurH[1] / pt2CurH[2];
 
-                if (proj_depth > 0 && dRef > 0) {
+			double dx = K(0,0) * interpolate(ptrGradX, px, py, w, h);
+			double dy = K(1,1) * interpolate(ptrGradY, px, py, w, h);
 
-                    double XP = pTrans(0, 0);
-                    double YP = pTrans(1, 0);
-                    double ZP = pTrans(2, 0);
+			double XP = pt3Cur[0];
+			double YP = pt3Cur[1];
+			double ZP = pt3Cur[2];
 
-                    double dx = dxI(y, x);
-                    double dy = dyI(y, x);
-
-                    J(y*width + x, 0) = dx / ZP;
-                    J(y*width + x, 1) = dy / ZP;
-                    J(y*width + x, 2) = -(dx * XP + dy * YP)
-                            / (ZP * ZP);
-                    J(y*width + x, 3) = -(dx * XP * YP)
-                            / (ZP * ZP
-                                    - dy * (1 +std::pow((double)(YP / ZP),2)));
-                    J(y*width + x, 4) = dx * (1 + std::pow((double)(XP / ZP),
-                            2)) + (dy * XP * YP) / (ZP*ZP);
-                    J(y*width + x, 5) = (-dx * YP + dy * XP) / ZP;
-                 }
-              }
-           }
+			J(off, 0) = dx / ZP;
+			J(off, 1) = dy / ZP;
+			J(off, 2) = -(dx * XP + dy * YP)
+				/ (ZP * ZP);
+			J(off, 3) = -(dx * XP * YP)
+				/ (ZP * ZP
+					- dy * (1 + (YP/ZP)*(YP/ZP)));
+			J(off, 4) = dx * (1 + (XP/ZP) * (XP/ZP)) + (dy * XP * YP) / (ZP*ZP);
+			J(off, 5) = (-dx * YP + dy * XP) / ZP;
+			
+			bool isnan = false; 
+			for (int i = 0; i<6; i++) {
+			    if (std::isnan(J(off, i))) {
+				isnan = true;
+			    }
+			}
+			if (isnan) {
+			    for (int i = 0; i<6; i++) {
+				J(off,i) = 0.0;
+			    }
+			}
+		    } // dCur >0
+		} //dRef > 0
+           } //x
+	} //y
 
         J = -J;
 
@@ -720,12 +750,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     //convertSE3ToTf(xi, rot, t);
     rot = transform.block<3,3>(0,0);
     t = transform.block<3,1>(0,3);
-    convertTfToSE3( rot, t, xi );
-    
-    ROS_INFO_STREAM("Initial pose: ");
-    ROS_INFO_STREAM("t = " << t.transpose() << std::endl);
-    ROS_INFO_STREAM("R = " << rot << std::endl);
-    
+    convertTfToSE3( rot, t, xi ); 
 
     bool useNumericDerivative = false;
     
@@ -734,6 +759,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
     bool useLM = false;
     bool useWeights = true;
     int numIterations = 20;
+    int curIerations = 0;
     int maxLevel = numPyramidLevels-1;
     int minLevel = 1;
     
@@ -766,17 +792,24 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
         // Iterative computation of pose (rot, t)
         for (int itr = 0; itr < numIterations; ++itr)
         {
+	    curIerations++;
             // compute residuals and Jacobian
             Eigen::VectorXf residuals;                          // 1 x n
             Eigen::MatrixXf J(grayRef.rows * grayRef.cols, 6);  // n x 6
 
             if( useNumericDerivative )
-              deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, kLevel, residuals, J);
-            else
-              deriveAnalytic(grayRef, depthRef, grayCur, depthCur, gradX, gradY, xi, kLevel, residuals, J);
+		deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, kLevel, residuals, J);
+            else {
+		deriveNumeric(grayRef, depthRef, grayCur, depthCur, xi, kLevel, residuals, J);
+		if (level == minLevel) {
+		    ROS_ERROR_STREAM( "Numeric: \n" << (J.block<1,6>(100*100,0)));
+		}
+		deriveAnalytic(grayRef, depthRef, grayCur, depthCur, gradX, gradY, xi, kLevel, residuals, J);
+		if (level == minLevel) {
+		    ROS_WARN_STREAM( "Analytical: \n" << (J.block<1,6>(100*100,0)));
+		}	
+	    }
 
-            // TODO: exercise 2 e)
-            calculateCovariance(J, covariance);
 
 #if DEBUG_OUTPUT
             // compute and show error image
@@ -808,6 +841,21 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
                         J(i, j) = J(i, j) * weights[i];
             }
             
+	    // TODO: exercise 2 e)
+            calculateCovariance(J, covariance);
+	    convertSE3ToTf(xi, rot, t);
+	    Eigen::Matrix3f tSkew ;
+	    tSkew << 0, -t(2), t(1), t(2), 0, -t(0), -t(1), t(0), 0;
+	    tSkew = tSkew * rot;
+	    Mat6f adj = Mat6f::Zero();			//  0-2 3-5
+	    adj.block<3,3>(0,0) = rot;		// | R t_x*R |
+	    adj.block<3,3>(0,3) = tSkew;	// | 0   R   |
+	    adj.block<3,3>(3,3) = rot;
+
+	    Mat6f adjt = adj.transpose();
+	    covariance = (Jt*J).inverse();
+	    covariance = adj*covariance*adjt;
+            
             // compute update
             Eigen::VectorXf b = Jt * residuals;
             if (useGD)
@@ -829,9 +877,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
                 // BEN: Implement Levenberg-Marquardt algorithm
                 A = Jt * J;
                 Mat6f diag = A.diagonal().asDiagonal();
-#if DEBUG_OUTPUT
-                ROS_ERROR_STREAM( "If " << diag << " is is the diagonal of " << A << " delete this output");
-#endif
+
                 A = A + lambda * diag;
                 delta = -(A.ldlt().solve(b));
             }
@@ -839,10 +885,10 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
             // apply update
             // right-multiplicative increment on SE3
             lastXi = xi;
-            xi = Sophus::SE3f::log( Sophus::SE3f::exp(xi) * Sophus::SE3f::exp(delta) );
+            xi = Sophus::SE3f::log( Sophus::SE3f::exp(delta) * Sophus::SE3f::exp(xi));
 #if DEBUG_OUTPUT
-            ROS_INFO_STREAM( "delta = " << delta.transpose() << " size = " << delta.rows() << " x " << delta.cols());
-            ROS_INFO_STREAM( "xi = " << xi.transpose());
+            //ROS_INFO_STREAM( "delta = " << delta.transpose() << " size = " << delta.rows() << " x " << delta.cols());
+            //ROS_INFO_STREAM( "xi = " << xi.transpose());
 #endif
             
             // compute error again
@@ -875,7 +921,7 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
         }// iteration
     }// level
     tmr = ((float)cv::getTickCount() - tmr)/cv::getTickFrequency();
-    ROS_INFO_STREAM( "runtime: " << tmr );
+    ROS_INFO_STREAM( "runtime: " << tmr << ", " << curIerations/numPyramidLevels << " iterations.");
 
     convertSE3ToTf(xi, rot, t);
     
@@ -884,38 +930,6 @@ void alignImages( Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef, const c
 
     // TODO: exercise 2 e)
     Eigen::Quaternionf q(rot);
-
-    // compute eigenvalues and eigenvectors for sphere scale
-//    Eigen::EigenSolver<Eigen::MatrixXf> es(covariance, true);
-//    ROS_ERROR_STREAM("The eigenvalues of A are: " << es.eigenvalues().transpose());
-//    ROS_ERROR_STREAM("The matrix of eigenvectors is:" << "\n" << es.eigenvectors());
-
-//    Eigen::Vector3f scale = ;
-
-//    marker.header.frame_id = "odometry";
-//    marker.header.stamp = ros::Time();
-//    marker.ns = "marker_namespace";
-//    marker.id = 0;
-//    marker.type = visualization_msgs::Marker::SPHERE;
-//    marker.action = visualization_msgs::Marker::ADD;
-//    // translation
-//    marker.pose.position.x = 0; //t.x();
-//    marker.pose.position.y = 0; //t.y();
-//    marker.pose.position.z = 0; //t.z();
-//    // rotation
-//    marker.pose.orientation.x = q.x();
-//    marker.pose.orientation.y = q.y();
-//    marker.pose.orientation.z = q.z();
-//    marker.pose.orientation.w = q.w();
-//    // scale
-//    marker.scale.x = 2;
-//    marker.scale.y = 2;
-//    marker.scale.z = 2;
-//    // colors
-//    marker.color.r = 1.0;
-//    marker.color.g = 0.0;
-//    marker.color.b = 1.0;
-//    marker.color.a = 1.0;
 
     msg.header.frame_id = "odometry";
     msg.header.stamp = ros::Time::now();

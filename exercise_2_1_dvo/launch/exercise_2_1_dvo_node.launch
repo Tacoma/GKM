@@ -1,6 +1,6 @@
 <launch>
 
-  <node launch-prefix="" pkg="exercise_2_1_dvo" name="exercise_2_1_dvo_node" type="exercise_2_1_dvo_node">
+  <node launch-prefix="" pkg="exercise_2_1_dvo" name="exercise_2_1_dvo_node" type="exercise_2_1_dvo_node" output="screen">
     <remap from="~image_rgb" to="/camera/rgb/image_color"/>
     <remap from="~image_depth" to="/camera/depth/image"/>
   </node>

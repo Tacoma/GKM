@@ -28,7 +28,6 @@
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
 ros::Publisher pub_vis_covariance;
-ros::Publisher pub_vis_covariance2;
 
 boost::shared_ptr<tf::TransformBroadcaster> tf_broadcaster_; // pointer to delay creation 
 boost::shared_ptr<tf::TransformListener> tf_listener_;
@@ -130,8 +129,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb, const sensor_msgs::Im
     
     if( !grayRef.empty() ) {
         alignImages( transform, grayRef, depthRef, grayCur, depthCur, cameraMatrix );
-//        pub_vis_covariance.publish(getMarker());
-        pub_vis_covariance2.publish(getMsg());
+        pub_vis_covariance.publish(getMsg());
     }
 
     grayRef = grayCur.clone();
@@ -205,8 +203,7 @@ int main(int argc, char** argv)
   sync.registerCallback(boost::bind(&callback, _1, _2));
   
   pub_pointcloud = nh.advertise< pcl::PointCloud< pcl::PointXYZRGB > >( "pointcloud", 1 );
-  pub_vis_covariance = nh.advertise<visualization_msgs::Marker>("visualization_marker", 0 );
-  pub_vis_covariance2 = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("covariance_marker", 0 );
+  pub_vis_covariance = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("covariance_marker", 0 );
 
   ros::Rate loop_rate(100);
 
