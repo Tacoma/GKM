@@ -34,7 +34,7 @@
     <windForceMean>0</windForceMean> <!-- [N] -->
     <windGustDirection>1 1 0</windGustDirection>
     <windGustDuration>2</windGustDuration> <!-- [s] -->
-    <windGustStart>40</windGustStart> <!-- [s] -->
+    <windGustStart>10</windGustStart> <!-- [s] -->
     <windGustForceMean>5</windGustForceMean> <!-- [N] -->
   </plugin>
 </gazebo>

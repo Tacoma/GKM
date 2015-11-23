@@ -246,7 +246,7 @@ public:
 
         //1. Compute sigma points
         Vector15  delta;
-        delta = Vector15.Zero();
+        delta = Vector15::Zero();
 
         compute_sigma_points(delta);
 
@@ -258,7 +258,7 @@ public:
             Vector3 t = sigma_pose[i].topRightCorner(3,1);
 
             t                            =       t + sigma_linear_velocity[i]*dt;
-            sigma_linear_velocity[i]     =       sigma_linear_velocity[i] + (rot*(accel_measurement - sigma_accel_bias[i])-g)*dt;
+//            sigma_linear_velocity[i]     =       sigma_linear_velocity[i] + (rot*(accel_measurement - sigma_accel_bias[i])-g)*dt;
             rot                          =       rot*exp((gyro_measurement-sigma_gyro_bias[i])*dt);
 
         }

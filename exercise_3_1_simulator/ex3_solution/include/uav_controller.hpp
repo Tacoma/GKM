@@ -24,6 +24,9 @@
 #include <list>
 #include <fstream>
 
+#define INTEGRAL_RING_BUFFER_SIZE 400
+
+
 template<typename _Scalar>
 class UAVController {
 
@@ -73,8 +76,9 @@ private:
 
 	mav_msgs::CommandAttitudeThrust command;
 
-    // debug
-    Vector3 position_integral;
+    // position integral ring buffer
+    Vector3 position_integral[INTEGRAL_RING_BUFFER_SIZE];
+    unsigned int integral_idx;
 
 	void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
 		Eigen::Vector3d accel_measurement, gyro_measurement;
@@ -139,15 +143,26 @@ private:
         Vector3 curr_velocity;
         getPoseAndVelocity(curr_pose, curr_velocity);
 
-        const float kp = 4.0f; // proportional gains of the PID controller
+        const float kp = 8.0f; // proportional gains of the PID controller
         const float kd = 4.0f; // differential gains of the PID controller
         const float ki = 8.0f; // integral gains of the PID controller
 
         // x'' = kp*(xd-x) + kd*(xd'-x') + ki*integral(xd-x, delta_time)
-        position_integral += delta_time*(pose.translation() - curr_pose.translation());
+//        position_integral += delta_time*(pose.translation() - curr_pose.translation());
+        position_integral[integral_idx] = delta_time*(pose.translation() - curr_pose.translation());
+        integral_idx = (integral_idx+1) % INTEGRAL_RING_BUFFER_SIZE;
+
+        // calculate integral
+        Vector3 integral = Vector3(0,0,0);
+        for(int i=0; i<INTEGRAL_RING_BUFFER_SIZE; i++) {
+            integral += position_integral[i];
+        }
+
+        // calculate acceleration for force calculation
         Vector3 a = kp*(pose.translation() - curr_pose.translation()) +
                     kd*(linear_velocity - curr_velocity) +
-                    ki*position_integral;
+                    ki*integral;
+
         return m*a; // f = m * a
 	}
 
@@ -167,7 +182,7 @@ public:
 
 	UAVController(ros::NodeHandle & nh) :
          ground_truth_time(0),
-         position_integral(0,0,0){
+         integral_idx(0){
 
         use_ground_thruth_data = true;
 
@@ -200,6 +215,10 @@ public:
 		command_pub = nh.advertise<mav_msgs::CommandAttitudeThrust>(
 				"command/attitude", 10);
 
+        // initialize position integral
+        for(int i=0; i<INTEGRAL_RING_BUFFER_SIZE; i++) {
+            position_integral[i] = Vector3(0,0,0);
+        }
 
 		// Wake up simulation, from this point on, you have 30s to initialize
 		// everything and fly to the evaluation position (x=0m y=0m z=1m).
@@ -224,7 +243,7 @@ public:
         Vector3 curr_velocity;
         Vector3 desired_velocity = Vector3(0,0,0);
 
-        double delta_time = 0.001d; // ?
+        double delta_time = 0.001d; // TODO
 
         getPoseAndVelocity(curr_pose, curr_velocity);
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
