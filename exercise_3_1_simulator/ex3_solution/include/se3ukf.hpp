@@ -163,7 +163,7 @@ private:
 
 	// Compute mean and covariance from sigma points.
 	// For computing mean previous function can be used.
-	void compute_mean_and_covariance() {
+    void compute_mean_and_covariance() {
 		compute_mean(pose, linear_velocity, accel_bias, gyro_bias);
 		covariance.setZero();
 
@@ -243,6 +243,28 @@ public:
 	void predict(const Vector3 & accel_measurement,
 			const Vector3 & gyro_measurement, const _Scalar dt,
 			const Matrix3 & accel_noise, const Matrix3 & gyro_noise) {
+
+        //1. Compute sigma points
+        Vector15  delta;
+        delta = Vector15.Zero();
+
+        compute_sigma_points(delta);
+
+        //2. For each sigma point, apply IMU model
+
+        for(int i = 0;i < NUM_SIGMA_POINTS ; i++){
+            // Get rotation and translation from the pose
+            Matrix3 rot = sigma_pose[i].topLeftCorner(3, 3);
+            Vector3 t = sigma_pose[i].topRightCorner(3,1);
+
+            t                            =       t + sigma_linear_velocity[i]*dt;
+            sigma_linear_velocity[i]     =       sigma_linear_velocity[i] + (rot*(accel_measurement - sigma_accel_bias[i])-g)*dt;
+            rot                          =       rot*exp((gyro_measurement-sigma_gyro_bias[i])*dt);
+
+        }
+
+        //3. Compute new mean and covarience.
+        compute_mean_and_covariance();
 
 	}
 
