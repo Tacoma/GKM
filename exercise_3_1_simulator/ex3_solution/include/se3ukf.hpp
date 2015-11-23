@@ -65,7 +65,6 @@ private:
 
 	// Compute sigma points from covariance matrix
 	void compute_sigma_points(const Vector15 & delta = Vector15::Zero()) {
-
 		print_if_too_large(delta.template segment<3>(3), "Delta");
 
 		Eigen::LLT<Matrix15> llt_of_covariance(covariance);
@@ -73,8 +72,7 @@ private:
 		Matrix15 L = llt_of_covariance.matrixL();
 
 		sigma_pose[0] = pose * SE3Type::exp(delta.template head<6>());
-		sigma_linear_velocity[0] = linear_velocity
-				+ delta.template segment<3>(6);
+        sigma_linear_velocity[0] = linear_velocity + delta.template segment<3>(6);
 		sigma_accel_bias[0] = accel_bias + delta.template segment<3>(9);
 		sigma_gyro_bias[0] = gyro_bias + delta.template segment<3>(12);
 
@@ -115,15 +113,13 @@ private:
 			print_if_too_large(
 					delta.template segment<3>(3) - eps.template segment<3>(3),
 					"Delta - Epsilon");
-
 		}
-
 	}
 
 	// Compute mean of the sigma points.
 	// For SE3 an iterative method should be used.
-	void compute_mean(SE3Type & mean_pose, Vector3 & mean_linear_velocity,
-			Vector3 & mean_accel_bias, Vector3 & mean_gyro_bias) {
+    void compute_mean(  SE3Type & mean_pose, Vector3 & mean_linear_velocity,
+                        Vector3 & mean_accel_bias, Vector3 & mean_gyro_bias) {
 
 		mean_linear_velocity.setZero();
 		mean_accel_bias.setZero();
@@ -153,11 +149,8 @@ private:
 
 			mean_pose *= SE3Type::exp(delta);
 			iterations++;
-
-		} while (delta.array().abs().maxCoeff()
-				> Sophus::SophusConstants<_Scalar>::epsilon()
-				&& iterations < max_iterations);
-
+        } while (   delta.array().abs().maxCoeff() > Sophus::SophusConstants<_Scalar>::epsilon()
+                    && iterations < max_iterations);
 	}
 
 
@@ -170,21 +163,18 @@ private:
 		for (int i = 0; i < NUM_SIGMA_POINTS; i++) {
 			Vector15 eps;
 
-			eps.template head<6>() = SE3Type::log(
-					pose.inverse() * sigma_pose[i]);
-			eps.template segment<3>(6) = sigma_linear_velocity[i]
-					- linear_velocity;
+			eps.template head<6>() = SE3Type::log(pose.inverse() * sigma_pose[i]);
+            eps.template segment<3>(6) = sigma_linear_velocity[i] - linear_velocity;
 			eps.template segment<3>(9) = sigma_accel_bias[i] - accel_bias;
 			eps.template segment<3>(12) = sigma_gyro_bias[i] - gyro_bias;
 
 			covariance += eps * eps.transpose();
 		}
 		covariance /= 2;
-
 	}
 
-public:
 
+public:
 	typedef boost::shared_ptr<SE3UKF> Ptr;
 
 	SE3UKF(const SE3Type & initial_pose,
@@ -239,35 +229,33 @@ public:
 		return *this;
 	}
 
+
+    // TODO: exercise 2 b)
 	// Predict new state and covariance with IMU measurement.
-	void predict(const Vector3 & accel_measurement,
-			const Vector3 & gyro_measurement, const _Scalar dt,
-			const Matrix3 & accel_noise, const Matrix3 & gyro_noise) {
+    void predict(   const Vector3 & accel_measurement,
+                    const Vector3 & gyro_measurement, const _Scalar dt,
+                    const Matrix3 & accel_noise, const Matrix3 & gyro_noise) {
 
-        //1. Compute sigma points
-        Vector15  delta;
-        delta = Vector15::Zero();
+        // 1. compute sigma points of current state
+        compute_sigma_points(covariance);
 
-        compute_sigma_points(delta);
+        // 2. for each sigma point, apply given IMU motion model
+        for(int i=0; i<NUM_SIGMA_POINTS; i++) {
+            // get rotation and translation from the pose
+//            Matrix3 rot = sigma_pose[i].topLeftCorner(3,3);
+//            Vector3 t = sigma_pose[i].topRightCorner(3,1);
 
-        //2. For each sigma point, apply IMU model
-
-        for(int i = 0;i < NUM_SIGMA_POINTS ; i++){
-            // Get rotation and translation from the pose
-            Matrix3 rot = sigma_pose[i].topLeftCorner(3, 3);
-            Vector3 t = sigma_pose[i].topRightCorner(3,1);
-
-            t                            =       t + sigma_linear_velocity[i]*dt;
-//            sigma_linear_velocity[i]     =       sigma_linear_velocity[i] + (rot*(accel_measurement - sigma_accel_bias[i])-g)*dt;
-            rot                          =       rot*exp((gyro_measurement-sigma_gyro_bias[i])*dt);
-
+            sigma_pose[i].topRightCorner(3,1)   = sigma_pose[i].topRightCorner(3,1) + sigma_linear_velocity[i] * dt;
+            sigma_linear_velocity[i]            = sigma_linear_velocity[i] + (sigma_pose[i].topLeftCorner(3,3) * (accel_measurement - sigma_accel_bias[i]) - 9.81f) * dt;
+            sigma_pose[i].topLeftCorner(3,3)    = sigma_pose[i].topLeftCorner(3,3) * exp((gyro_measurement-sigma_gyro_bias[i])*dt);
         }
 
-        //3. Compute new mean and covarience.
+        // 3. compute new mean and covarience.
         compute_mean_and_covariance();
-
 	}
 
+
+    // TODO: exercise 2 c)
 	// Apply 6d pose measurement.
 	void measurePose(const SE3Type & measured_pose,
 			const Matrix6 & measurement_noise) {
