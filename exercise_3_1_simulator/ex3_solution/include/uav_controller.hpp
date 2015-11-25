@@ -24,7 +24,11 @@
 #include <list>
 #include <fstream>
 
-#define INTEGRAL_RING_BUFFER_SIZE 400
+#define INTEGRAL_RING_BUFFER_SIZE 200
+
+#define KP 1
+#define KD 0.5
+#define KI 0
 
 
 template<typename _Scalar>
@@ -60,6 +64,10 @@ private:
     SE3Type ground_truth_pose;
     Vector3 ground_truth_linear_velocity;
     double ground_truth_time;
+    
+    // UKF data
+    SE3UKF<_Scalar> *ukf;
+    double previous_time;
 
     // Constants
     _Scalar g;
@@ -89,9 +97,16 @@ private:
     void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
         Eigen::Vector3d accel_measurement, gyro_measurement;
         tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
+	double dt;
+	if (previous_time < 0) {
+	    previous_time = msg->header.stamp.toSec();	    
+	}
+	dt = msg->header.stamp.toSec() - previous_time;
+	previous_time = msg->header.stamp.toSec();
         tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
+	ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
 
-        sendControlSignal();
+        sendControlSignal(dt);
     }
 
     /**
@@ -129,11 +144,18 @@ private:
         const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
         Eigen::Quaterniond orientation;
         Eigen::Vector3d position;
+	
+	Matrix6 covariance;// = Eigen::Map<Matrix6>(msg->pose.covariance);
+	
+	for (int i = 0; i < 36; i++) {
+	    covariance.data()[i] = msg->pose.covariance[i];
+	}
 
         tf::pointMsgToEigen(msg->pose.pose.position, position);
         tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
         SE3Type pose(orientation, position);
+	ukf->measurePose(pose, covariance);
     }
 
     // TODO: exercise 1 d)
@@ -146,12 +168,12 @@ private:
     mav_msgs::CommandAttitudeThrust computeCommandFromForce(
         const Vector3 & control_force, const SE3Type & pose,
         double delta_time) {
-        float yaw = 0.f;
+        float yaw = 0.0f;
         // f = m * a    ==>     a = f / m
         Vector3 a = control_force/m;
         float roll =  1.0f/g * (a.x()*sin(yaw) - a.y()*cos(yaw));
         float pitch = 1.0f/g * (a.x()*cos(yaw) + a.y()*sin(yaw));
-        float thrust = a.z() + m*g;
+        float thrust = control_force.z() + m*g;
 
         mav_msgs::CommandAttitudeThrust msg;
         msg.roll = roll;    // [rad]
@@ -178,9 +200,9 @@ private:
         Vector3 curr_velocity;
         getPoseAndVelocity(curr_pose, curr_velocity);
 
-        const float kp = 8.0f; // proportional gains of the PID controller
-        const float kd = 4.0f; // differential gains of the PID controller
-        const float ki = 8.0f; // integral gains of the PID controller
+        const float kp = KP; // proportional gains of the PID controller
+        const float kd = KD; // differential gains of the PID controller
+        const float ki = KI; // integral gains of the PID controller
 
         // x'' = kp*(xd-x) + kd*(xd'-x') + ki*integral(xd-x, delta_time)
 //        position_integral += delta_time*(pose.translation() - curr_pose.translation());
@@ -214,7 +236,8 @@ private:
             pose = ground_truth_pose;
             linear_velocity = ground_truth_linear_velocity;
         } else {
-
+	    pose = ukf->get_pose();
+	    linear_velocity = ukf->get_linear_velocity();
         }
     }
 
@@ -224,6 +247,7 @@ public:
 
     UAVController(ros::NodeHandle & nh) :
         ground_truth_time(0),
+        previous_time(-1),
         integral_idx(0) {
 
         use_ground_thruth_data = true;
@@ -245,6 +269,9 @@ public:
         Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
         T_imu_cam.setQuaternion(q);
         T_imu_cam.translation() << 0.03, -0.07, 0.1;
+	
+	// Init uncsented kallman filter
+	ukf = new SE3UKF<_Scalar>(initial_pose, Vector3(0,0,0), Vector3(0,0,0), Vector3(0,0,0), initial_state_covariance);
 
         // Init subscribers and publishers
         imu_sub = nh.subscribe("imu", 10, &UAVController<_Scalar>::imuCallback,
@@ -277,16 +304,15 @@ public:
     }
 
     ~UAVController() {
+	delete ukf;
     }
 
     // TODO: exercise 1 e)
     /**
      * @brief calculates and publishes a CommandAttitudeThrust message from the desired_pose
      */
-    void sendControlSignal() {
+    void sendControlSignal(double delta_time) {
         Vector3 desired_velocity = Vector3(0,0,0);
-
-        double delta_time = 0.001d; // TODO
 
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
 
