@@ -24,11 +24,12 @@
 #include <list>
 #include <fstream>
 
-#define INTEGRAL_RING_BUFFER_SIZE 200
+#define INTEGRAL_RING_BUFFER_SIZE 200 // 100 per second -> size/100 = inntegration interval in seconds
+#define MAX_INTEGRAL 1
 
-#define KP 1
-#define KD 0.5
-#define KI 0
+#define KP 1 // proportional gains of the PID controller
+#define KD 2 // differential gains of the PID controller
+#define KI 0.5 // integral gains of the PID controller
 
 
 template<typename _Scalar>
@@ -104,7 +105,7 @@ private:
 	dt = msg->header.stamp.toSec() - previous_time;
 	previous_time = msg->header.stamp.toSec();
         tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
-	ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
+	//ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
 
         sendControlSignal(dt);
     }
@@ -155,7 +156,7 @@ private:
         tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
         SE3Type pose(orientation, position);
-	ukf->measurePose(pose, covariance);
+	//ukf->measurePose(pose, covariance);
     }
 
     // TODO: exercise 1 d)
@@ -173,7 +174,7 @@ private:
         Vector3 a = control_force/m;
         float roll =  1.0f/g * (a.x()*sin(yaw) - a.y()*cos(yaw));
         float pitch = 1.0f/g * (a.x()*cos(yaw) + a.y()*sin(yaw));
-        float thrust = control_force.z() + m*g;
+        float thrust = a.z() + m*g;
 
         mav_msgs::CommandAttitudeThrust msg;
         msg.roll = roll;    // [rad]
@@ -200,25 +201,25 @@ private:
         Vector3 curr_velocity;
         getPoseAndVelocity(curr_pose, curr_velocity);
 
-        const float kp = KP; // proportional gains of the PID controller
-        const float kd = KD; // differential gains of the PID controller
-        const float ki = KI; // integral gains of the PID controller
-
-        // x'' = kp*(xd-x) + kd*(xd'-x') + ki*integral(xd-x, delta_time)
-//        position_integral += delta_time*(pose.translation() - curr_pose.translation());
         position_integral[integral_idx] = delta_time*(pose.translation() - curr_pose.translation());
         integral_idx = (integral_idx+1) % INTEGRAL_RING_BUFFER_SIZE;
 
-        // calculate integral
+        // calculate and clamp integral
         Vector3 integral = Vector3(0,0,0);
         for(int i=0; i<INTEGRAL_RING_BUFFER_SIZE; i++) {
             integral += position_integral[i];
         }
+        //ROS_INFO_STREAM("Integral = \n" << integral);
+	if ( integral.norm() > MAX_INTEGRAL ) {
+	    integral.normalize();
+	    integral *= MAX_INTEGRAL;
+	    //ROS_INFO_STREAM("Integral too large, setting integral to:\n" << integral);
+	}
 
         // calculate acceleration for force calculation
-        Vector3 a = kp*(pose.translation() - curr_pose.translation()) +
-                    kd*(linear_velocity - curr_velocity) +
-                    ki*integral;
+        Vector3 a = KP*(pose.translation() - curr_pose.translation()) +
+                    KD*(linear_velocity - curr_velocity) +
+                    KI*integral;
 
         return m*a; // f = m * a
     }
@@ -301,6 +302,8 @@ public:
             ROS_FATAL("could not wake up gazebo");
             exit(-1);
         }
+        
+        ROS_INFO_STREAM("PID running with \n k_p = " << KP << ", k_d = " << KD << ", k_i = " << KI);        
     }
 
     ~UAVController() {
