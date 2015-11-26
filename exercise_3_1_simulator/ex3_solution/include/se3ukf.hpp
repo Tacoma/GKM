@@ -315,6 +315,7 @@ public:
 	    // Matrix3 rot = sigma_pose_[i].topLeftCorner(3,3);
 	    // Vector3 t = sigma_pose_[i].topRightCorner(3,1);
 
+	    // p.15 in http://arxiv.org/pdf/1107.1119.pdf p.12
             sigma_pose_[i].translation() = sigma_pose_[i].translation() + ( sigma_linear_velocity_[i] * dt );
             sigma_linear_velocity_[i]    = sigma_linear_velocity_[i] + (sigma_pose_[i].rotationMatrix() * (accel_measurement - sigma_accel_bias_[i])) * dt;
             sigma_pose_[i].setRotationMatrix( sigma_pose_[i].rotationMatrix() * 
@@ -334,6 +335,8 @@ public:
 	// TODO: compute 60 with compute_mean_and_covariance() ?
 	// TODO: compute 59 analogue to compute_mean_and_covariance() ?
 	// TODO: compute 61, 62, 63 somehow
+	// INFO: 60: Q_t = noise =? measurement_noise
+	// INFO: 62: z_t =? measurement_pose
 	// DELETE: compute 64 with compute_sigma_points !! There is a delta in there !!
 	// DELETE: compute 65 and 66 with compute_mean_and_covariance() !
 	/**
