@@ -94,7 +94,7 @@ private:
 		// sigma(0)_old = mean
 		// sigma(0)_new = sigma(0)_old + delta ( equals g(u_t, sigma_old) in line 53)
 		sigma_pose_[0] = pose_ * SE3Type::exp(delta.template head<6>());
-        	sigma_linear_velocity_[0] = linear_velocity_ + delta.template segment<3>(6);
+        sigma_linear_velocity_[0] = linear_velocity_ + delta.template segment<3>(6);
 		sigma_accel_bias_[0] = accel_bias_ + delta.template segment<3>(9);
 		sigma_gyro_bias_[0] = gyro_bias_ + delta.template segment<3>(12);
 
@@ -280,7 +280,7 @@ public:
 	}
 
 
-    	// TODO: exercise 2 b)
+    // TODO: exercise 2 b)
 	/**
 	 * Predict new state and covariance with IMU measurement.
 	 * @param accel_measurement
@@ -300,22 +300,24 @@ public:
 	 */
     void predict(   const Vector3 & accel_measurement,
                     const Vector3 & gyro_measurement, 
-		    const _Scalar dt,
+                    const _Scalar dt,
                     const Matrix3 & accel_noise, 
-		    const Matrix3 & gyro_noise) {
+                    const Matrix3 & gyro_noise) {
 
         // 1. compute sigma points of current state
+        // sigmaPoints_(t-1) = (mean_(t-1), mean_(t-1) + sqrt(covariance_(t-1), mean_(t-1) - sqrt(covariance_(t-1))) p.12 l.52
         compute_sigma_points(); // DELETE: add delta? addendum: probably not, because the delta is also in line 64
 
         // 2. for each sigma point, apply given IMU motion model
         // DELETE: isn't that done already in compute_sigma_points(delta), if we chose delta as our new measurement ?
         // addendum: probably not, because the delta is also in line 64
+        // post addendum: here we actually calculate g(u_t, sigmaPoints_(t-1)) = sigmaPoints^*_t p.12 l.53
         for(int i=0; i<NUM_SIGMA_POINTS; i++) {
             // get rotation and translation from the pose
-	    // Matrix3 rot = sigma_pose_[i].topLeftCorner(3,3);
-	    // Vector3 t = sigma_pose_[i].topRightCorner(3,1);
+            // Matrix3 rot = sigma_pose_[i].topLeftCorner(3,3);
+            // Vector3 t = sigma_pose_[i].topRightCorner(3,1);
 
-	    // p.15 in http://arxiv.org/pdf/1107.1119.pdf p.12
+            // p.15 in http://arxiv.org/pdf/1107.1119.pdf p.12
             sigma_pose_[i].translation() = sigma_pose_[i].translation() + ( sigma_linear_velocity_[i] * dt );
             sigma_linear_velocity_[i]    = sigma_linear_velocity_[i] + (sigma_pose_[i].rotationMatrix() * (accel_measurement - sigma_accel_bias_[i])) * dt;
             sigma_pose_[i].setRotationMatrix( sigma_pose_[i].rotationMatrix() * 
@@ -323,6 +325,7 @@ public:
         }
 
         // 3. compute new mean and covarience.
+        // p.12 l.54 + 55
         compute_mean_and_covariance();
     }
 
@@ -352,14 +355,22 @@ public:
 	 * 
 	 * @return covariance_ corrected covariance
 	 */
-	void measurePose(const SE3Type & measured_pose,
-			const Matrix6 & measurement_noise) {
+    void measurePose(   const SE3Type & measured_pose,
+                        const Matrix6 & measurement_noise) {
 		compute_sigma_points(); // 56
 		// 57
+        //h(x) = Eigen::Matrix<_Scalar,4,4>(R(phi).transpose(), 0; 0 1) * ;
 		compute_mean_and_covariance(); // 58
-		// 59-63
-		compute_sigma_points(delta); // 64 TODO: delta
-		compute_mean_and_covariance(); // 65, 66
+        // assume for now we got z (z^_t) and S (S_t) from compute_mean_and_covariance()
+        // K = covriance_ * S.inverse();
+        // auxMean = K * (Vector15(measured_pose, measurement_noise) - z);
+        // mean_pose = mean_pose + auxMean.template head<6>();
+        // mean_linear_velocity = mean_linear_velocity + auxMean.template segment<3>(6);
+        // mean_accel_bias = mean_accel_bias + auxMean.template segment<3>(9);
+        // mean_gyro_bias = mean_gyro_bias + auxMean.template segment<3>(12);
+        // 59-63
+        compute_sigma_points(delta); // 64 TODO: delta
+        compute_mean_and_covariance(); // 65, 66
 	}
 
 	SE3Type get_pose() const {
