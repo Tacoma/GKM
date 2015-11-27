@@ -27,7 +27,7 @@
 #define INTEGRAL_RING_BUFFER_SIZE 200 // 100 per second -> size/100 = inntegration interval in seconds
 #define MAX_INTEGRAL 1
 
-#define KP 8 // proportional gains of the PID controller
+#define KP 4 // proportional gains of the PID controller
 #define KD 4 // differential gains of the PID controller
 #define KI 2 // integral gains of the PID controller
 
@@ -105,7 +105,9 @@ private:
         dt = msg->header.stamp.toSec() - previous_time;
         previous_time = msg->header.stamp.toSec();
             tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
-        //ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
+	if (!use_ground_thruth_data) {
+	    ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
+	}
 
         sendControlSignal(dt);
     }
@@ -156,7 +158,11 @@ private:
         tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
         SE3Type pose(orientation, position);
-	//ukf->measurePose(pose, covariance);
+	// TODO: move pose to imu frame
+	pose = T_imu_cam * pose;
+	if (!use_ground_thruth_data) {
+	    ukf->measurePose(pose, covariance);
+	}
     }
 
     // TODO: exercise 1 d)
@@ -278,8 +284,9 @@ public:
         T_imu_cam.translation() << 0.03, -0.07, 0.1;
 	
 	// Init uncsented kallman filter
-	ukf = new SE3UKF<_Scalar>(initial_pose, Vector3(0,0,0), Vector3(0,0,0), Vector3(0,0,0), initial_state_covariance);
-
+	if (!use_ground_thruth_data) {
+	    ukf = new SE3UKF<_Scalar>(initial_pose, Vector3(0,0,0), Vector3(0,0,0), Vector3(0,0,0), initial_state_covariance);
+	}
         // Init subscribers and publishers
         imu_sub = nh.subscribe("imu", 10, &UAVController<_Scalar>::imuCallback,
                                this);
@@ -313,7 +320,10 @@ public:
     }
 
     ~UAVController() {
-	delete ukf;
+	if (ukf) {
+	    delete ukf;
+	    ukf=0;
+	}	
     }
 
     // TODO: exercise 1 e)

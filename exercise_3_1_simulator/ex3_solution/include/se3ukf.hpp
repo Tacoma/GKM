@@ -335,21 +335,10 @@ public:
 
 
     // TODO: exercise 2 c)  (equals correction step in http://arxiv.org/pdf/1107.1119.pdf p.12)
-    // DELETE: compute line 56 with compute_sigma_points(delta) ? // if h(..., delta) is equal to g(..., 0) ?
-    // addendum: probably not because delta is also in line 64
-    // TODO: compute line 57
-    // DELETE: compute 58
-    // TODO: compute 60 with compute_mean_and_covariance() ?
-    // TODO: compute 59 analogue to compute_mean_and_covariance() ?
-    // TODO: compute 61, 62, 63 somehow
-    // INFO: 60: Q_t = noise =? measurement_noise
-    // INFO: 62: z_t =? measurement_pose
-    // DELETE: compute 64 with compute_sigma_points !! There is a delta in there !!
-    // DELETE: compute 65 and 66 with compute_mean_and_covariance() !
     /**
      * Apply 6d pose measurement.
-     * @param measured_pose
-     * @param measurement_noise 6x6 covariance matrix ?
+     * @param measured_pose z_t
+     * @param measurement_noise Q_t
      *
      * @return mean_pose
      * @return mean_linear_velocity
@@ -374,10 +363,10 @@ public:
         // This overwrites our old mean and covariance, therefore we saved it before
         compute_mean_and_covariance();
         // We are only  interested in the pose
-        Matrix6 S = covariance_.template head<6,6>() + measurement_noise;
+        Matrix6 S = covariance_.template block<6,6>(0,0) + measurement_noise;
 	
-	// 60  K = K_xz
-	Matrix15_6 K = covariance_.template head<15,6>();
+	// 60  K = K_xz // only if mean = zhat
+	Matrix15_6 K = covariance_.template block<15,6>(0,0);
 	// 62 K = K_t
         K = K * S.inverse();
         // auxMean = K * (Vector15(measured_pose, measurement_noise) - z);
@@ -385,9 +374,9 @@ public:
 	// 63
 	covariance_ = bar_covariance - K * S * K.transpose();
 
-	// 65 and 66
-        compute_sigma_points(delta); // 64 TODO: delta
-        compute_mean_and_covariance(); // 65, 66
+	// 64 - 66
+        compute_sigma_points(delta); // only if mean = zhat
+        compute_mean_and_covariance();
     }
 
     SE3Type get_pose() const {
