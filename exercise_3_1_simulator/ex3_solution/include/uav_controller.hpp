@@ -27,9 +27,9 @@
 #define INTEGRAL_RING_BUFFER_SIZE 200 // 100 per second -> size/100 = inntegration interval in seconds
 #define MAX_INTEGRAL 1
 
-#define KP 1 // proportional gains of the PID controller
-#define KD 2 // differential gains of the PID controller
-#define KI 0.5 // integral gains of the PID controller
+#define KP 8 // proportional gains of the PID controller
+#define KD 4 // differential gains of the PID controller
+#define KI 2 // integral gains of the PID controller
 
 
 template<typename _Scalar>
@@ -98,14 +98,14 @@ private:
     void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
         Eigen::Vector3d accel_measurement, gyro_measurement;
         tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
-	double dt;
-	if (previous_time < 0) {
-	    previous_time = msg->header.stamp.toSec();	    
-	}
-	dt = msg->header.stamp.toSec() - previous_time;
-	previous_time = msg->header.stamp.toSec();
-        tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
-	//ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
+        double dt;
+        if (previous_time < 0) {
+            previous_time = msg->header.stamp.toSec();
+        }
+        dt = msg->header.stamp.toSec() - previous_time;
+        previous_time = msg->header.stamp.toSec();
+            tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
+        //ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
 
         sendControlSignal(dt);
     }
@@ -169,7 +169,12 @@ private:
     mav_msgs::CommandAttitudeThrust computeCommandFromForce(
         const Vector3 & control_force, const SE3Type & pose,
         double delta_time) {
-        float yaw = 0.0f;
+
+        Sophus::Quaternion<_Scalar> q = pose.unit_quaternion();
+
+        float yaw = atan2(2.0*(q.x()*q.y() + q.w()*q.z()), q.w()*q.w() + q.x()*q.x() - q.y()*q.y() - q.z()*q.z()); // is actually a roll calculation
+//        ROS_ERROR_STREAM("yaw: " << yaw);
+
         // f = m * a    ==>     a = f / m
         Vector3 a = control_force/m;
         float roll =  1.0f/g * (a.x()*sin(yaw) - a.y()*cos(yaw));
@@ -179,8 +184,9 @@ private:
         mav_msgs::CommandAttitudeThrust msg;
         msg.roll = roll;    // [rad]
         msg.pitch = pitch;  // [rad]
-        msg.yaw_rate = yaw; // [rad/s]
+        msg.yaw_rate = 0.f; // [rad/s]
         msg.thrust = thrust;
+
         return msg;
     }
 
@@ -316,10 +322,14 @@ public:
      */
     void sendControlSignal(double delta_time) {
         Vector3 desired_velocity = Vector3(0,0,0);
+        SE3Type curr_pose;
+        Vector3 curr_linear_velocity;
+        getPoseAndVelocity(curr_pose, curr_linear_velocity);
+
 
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
 
-        command = computeCommandFromForce(dforce, desired_pose, delta_time);
+        command = computeCommandFromForce(dforce, curr_pose, delta_time);
         command_pub.publish(command);
     }
 
