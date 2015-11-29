@@ -161,7 +161,7 @@ private:
 	// TODO: move pose to imu frame
 	pose = T_imu_cam * pose;
 	if (!use_ground_thruth_data) {
-	    ukf->measurePose(pose, covariance);
+	    //ukf->measurePose(pose, covariance);
 	}
     }
 
@@ -263,7 +263,7 @@ public:
         previous_time(-1),
         integral_idx(0) {
 
-        use_ground_thruth_data = true;
+        use_ground_thruth_data = false;
 
         // ========= Constants ===================================//
         g = 9.8; // in rate_controller g = 9.81

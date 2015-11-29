@@ -331,6 +331,7 @@ public:
         // 3. compute new mean and covarience.
         // p.12 l.54 + 55
         compute_mean_and_covariance();
+	// TODO: add noise
     }
 
 
@@ -351,14 +352,6 @@ public:
     void measurePose(   const SE3Type & measured_pose,
                         const Matrix6 & measurement_noise) {
 
-        // covariance
-        Matrix15 bar_covariance = covariance_;
-
-        // 56 ?
-        compute_sigma_points(); // "Xbar" = compute_sigma_points()
-        // 57 ?
-        // "Zbar = Xbar.template head<6,6>()"
-
         // 58 and 59
         // This overwrites our old mean and covariance, therefore we saved it before
         compute_mean_and_covariance();
@@ -372,7 +365,10 @@ public:
         // auxMean = K * (Vector15(measured_pose, measurement_noise) - z);
 	Vector15 delta = K * SE3Type::log(pose_.inverse() * measured_pose);
 	// 63
-	covariance_ = bar_covariance - K * S * K.transpose();
+	covariance_ = covariance_ - K * S * K.transpose();
+	
+	// Symmetrize covariance
+	covariance_ = (covariance_ + covariance_.transpose()) / 2;
 
 	// 64 - 66
         compute_sigma_points(delta); // only if mean = zhat
