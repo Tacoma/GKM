@@ -1,5 +1,7 @@
 c) The Levenberg-Marquardt method and the Gauss-Newton method both converged after 20 and 10 steps respectively. The Gradient Descend did not converge which is odd, as it should always converge with a small enough step size. The higher number of iterations, that the LM needs can be explained by its design as a trade off between the fast GN and the stable GD, although its difficult to tell, because the LM uses a different break criteria, it stops if even a small GD step with lambda = 5 results in a larger error, while the GN stops after the change of error is smaller than 0.5% of the last error.
 
-d) The residual mean squared error (RMSE) for the absolute trajectory (ATE) is 0.237m for the numerical derivation and ??m for the analytical one. 
-The relative pose mean square error (RMSE-RPE) is 0.003m for the numerical and ??m for the analytical case.
+d) The residual mean squared error (RMSE) for the absolute trajectory (ATE) is 0.237m for the numerical derivation and 1.90m for the analytical one. 
+The relative pose mean square error (RMSE-RPE) is 0.003m for the numerical and 0.0213m for the analytical case.
 Dropping frames leads to larger transforms between individual frames, and larger errors should be expected. This is e.g. reflected in the RMSE of the absolute trajectory: taking every second frame leads to an error of 0.235m, every forth frame leads to 0.237, every 8th frame to 0.378m, every 16th frame to 0.795m, and taking only every 32th frame fails to reconstruct a trajectory (958m RMSE)
+
+e) For the covariance display we published PoseWithCovarianceStamped messages and used https://github.com/laas/rviz_plugin_covariance.git to display them.
