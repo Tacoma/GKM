@@ -320,12 +320,17 @@ public:
             // Vector3 t = sigma_pose_[i].topRightCorner(3,1);
 
             // p.15 in http://arxiv.org/pdf/1107.1119.pdf g(u, XI)
+// 	    Vector6 vel = Vector6(0,0,0,
+// 			    sigma_linear_velocity_[i].x(),
+// 			    sigma_linear_velocity_[i].y(),
+// 			    sigma_linear_velocity_[i].z());
+
             sigma_pose_[i].translation() = sigma_pose_[i].translation() + ( sigma_linear_velocity_[i] * dt );
             sigma_linear_velocity_[i]    = sigma_linear_velocity_[i] +
                                            ((sigma_pose_[i].rotationMatrix() * (accel_measurement - sigma_accel_bias_[i]))
-                                            - Vector3(0,0,-9.8)) * dt;
-            sigma_pose_[i].setRotationMatrix( sigma_pose_[i].rotationMatrix() *
-                                              Sophus::SO3Group<_Scalar>::exp( (gyro_measurement-sigma_gyro_bias_[i])*dt ).matrix());
+                                            - Vector3(0,0,9.8)) * dt;
+            sigma_pose_[i].so3() = ( sigma_pose_[i].so3() *
+                                              Sophus::SO3Group<_Scalar>::exp( (gyro_measurement-sigma_gyro_bias_[i])*dt ));
         }
 
         // 3. compute new mean and covarience.
@@ -352,9 +357,7 @@ public:
     void measurePose(   const SE3Type & measured_pose,
                         const Matrix6 & measurement_noise) {
 
-        // 58 and 59
-        // This overwrites our old mean and covariance, therefore we saved it before
-        compute_mean_and_covariance();
+
         // We are only  interested in the pose
         Matrix6 S = covariance_.template block<6,6>(0,0) + measurement_noise;
 	

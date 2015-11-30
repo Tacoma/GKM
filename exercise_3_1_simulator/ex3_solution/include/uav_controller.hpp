@@ -23,11 +23,13 @@
 
 #include <list>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 
 #define INTEGRAL_RING_BUFFER_SIZE 200 // 100 per second -> size/100 = inntegration interval in seconds
 #define MAX_INTEGRAL 1
 
-#define KP 4 // proportional gains of the PID controller
+#define KP 4  // proportional gains of the PID controller
 #define KD 4 // differential gains of the PID controller
 #define KI 2 // integral gains of the PID controller
 
@@ -65,7 +67,7 @@ private:
     SE3Type ground_truth_pose;
     Vector3 ground_truth_linear_velocity;
     double ground_truth_time;
-    
+
     // UKF data
     SE3UKF<_Scalar> *ukf;
     double previous_time;
@@ -82,6 +84,10 @@ private:
 
     // Pose to hoover at
     SE3Type desired_pose;
+    
+    // Debug stuff
+    bool newFile_;
+    std::string filename_;
 
     mav_msgs::CommandAttitudeThrust command;
 
@@ -89,13 +95,45 @@ private:
     Vector3 position_integral[INTEGRAL_RING_BUFFER_SIZE];
     unsigned int integral_idx;
 
+    bool savePosition(const std::string &filename, const Vector3 t, const ros::Time timestamp) {
+
+	if (newFile_) {
+	    int idx = 0;
+	    std::stringstream ss;
+	    ss << filename << idx++;
+	    while ( FILE *file = fopen(ss.str().c_str(), "r") ) {
+		ss.str("");
+		ss << filename << idx++;
+	    }
+	    filename_ = ss.str();
+	    newFile_ = false;
+	}
+	    
+        std::ofstream file;
+        file.open(filename_.c_str(), std::ios::out | std::ios::app | std::ios::binary);
+        if (!file.is_open()) {
+            ROS_ERROR_STREAM("Error opening " << filename << ".");
+            return false;
+        }
+
+        file << timestamp << " ";
+        file << t.x() << " " << t.y() << " " << t.z();
+        file << std::endl;
+
+        file.close();
+
+        return true;
+    }
+
+
     /**
      * @brief send a new control signal every time new gyro and acceleration measurements arrive
      * TODO: does not use imu measurements
-     * 
+     *
      * @param msg the new imu message
      */
     void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
+
         Eigen::Vector3d accel_measurement, gyro_measurement;
         tf::vectorMsgToEigen(msg->angular_velocity, gyro_measurement);
         double dt;
@@ -104,17 +142,16 @@ private:
         }
         dt = msg->header.stamp.toSec() - previous_time;
         previous_time = msg->header.stamp.toSec();
-            tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
-	if (!use_ground_thruth_data) {
-	    ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
-	}
+        tf::vectorMsgToEigen(msg->linear_acceleration, accel_measurement);
+	
+	ukf->predict(accel_measurement, gyro_measurement, dt, accel_noise, gyro_noise);
 
         sendControlSignal(dt);
     }
 
     /**
      * @brief saves the ground_truth pose and velocity in global variables
-     * 
+     *
      * @param msg
      * @return ground_truth_pose current pose
      * @return ground_truth_linear_velocity current velocity
@@ -122,6 +159,7 @@ private:
      */
     void groundTruthPoseCallback(
         const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
+
         Eigen::Quaterniond orientation;
         Eigen::Vector3d position;
 
@@ -140,37 +178,37 @@ private:
 
     /**
      * @brief TODO: fuse pose and imu information
-     * 
+     *
      * @param msg PoseWithCovarianceStampedConstPtr message
      */
     void pose1Callback(
         const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
+
         Eigen::Quaterniond orientation;
         Eigen::Vector3d position;
-	
-	Matrix6 covariance;// = Eigen::Map<Matrix6>(msg->pose.covariance);
-	
-	for (int i = 0; i < 36; i++) {
-	    covariance.data()[i] = msg->pose.covariance[i];
-	}
+
+        Matrix6 covariance;// = Eigen::Map<Matrix6>(msg->pose.covariance);
+
+        for (int i = 0; i < 36; i++) {
+            covariance.data()[i] = msg->pose.covariance[i];
+        }
 
         tf::pointMsgToEigen(msg->pose.pose.position, position);
         tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
         SE3Type pose(orientation, position);
-	// TODO: move pose to imu frame
-	pose = T_imu_cam * pose;
-	if (!use_ground_thruth_data) {
-	    //ukf->measurePose(pose, covariance);
-	}
+        // TODO: move pose to imu frame
+        pose = T_imu_cam * pose;
+	
+        ukf->measurePose(pose, covariance);
     }
 
     // TODO: exercise 1 d)
     /**
      *  @brief calculates the attitude and thrust from the desired control force
-     * 
+     *
      *  @param control_force the desired force, that the rotors should apply
-     *  @return the CommandAttitudeThrust message 
+     *  @return the CommandAttitudeThrust message
      */
     mav_msgs::CommandAttitudeThrust computeCommandFromForce(
         const Vector3 & control_force, const SE3Type & pose,
@@ -197,10 +235,10 @@ private:
     }
 
     // TODO: exercise 1 c)
-    
+
     /**
      * @brief compute the desired force with a simply PID
-     * 
+     *
      * @param curr_pose/curr_velocity gets current pose and velocity automatically
      * @param pose desired position and orientation
      * @param linear_velocity desired velocity
@@ -209,9 +247,10 @@ private:
      */
     Vector3 computeDesiredForce(const SE3Type & pose, const Vector3 & linear_velocity,
                                 double delta_time) {
+	
         SE3Type curr_pose;
         Vector3 curr_velocity;
-        getPoseAndVelocity(curr_pose, curr_velocity);
+        getPoseAndVelocity(curr_pose, curr_velocity, true);
 
         position_integral[integral_idx] = delta_time*(pose.translation() - curr_pose.translation());
         integral_idx = (integral_idx+1) % INTEGRAL_RING_BUFFER_SIZE;
@@ -222,11 +261,11 @@ private:
             integral += position_integral[i];
         }
         //ROS_INFO_STREAM("Integral = \n" << integral);
-	if ( integral.norm() > MAX_INTEGRAL ) {
-	    integral.normalize();
-	    integral *= MAX_INTEGRAL;
-	    //ROS_INFO_STREAM("Integral too large, setting integral to:\n" << integral);
-	}
+        if ( integral.norm() > MAX_INTEGRAL ) {
+            integral.normalize();
+            integral *= MAX_INTEGRAL;
+            //ROS_INFO_STREAM("Integral too large, setting integral to:\n" << integral);
+        }
 
         // calculate acceleration for force calculation
         Vector3 a = KP*(pose.translation() - curr_pose.translation()) +
@@ -237,20 +276,21 @@ private:
     }
 
     // TODO: exercise 1 b)
-    
+
     /**
      * @brief returns the current pose and velocity (either ground truth or estimated)
-     * 
+     *
      * @param pose return current pose
      * @param linear_velocity return current velocity
      */
-    void getPoseAndVelocity(SE3Type & pose, Vector3 & linear_velocity) {
-        if (use_ground_thruth_data) {
+    void getPoseAndVelocity(SE3Type & pose, Vector3 & linear_velocity, bool ground_truth) {
+
+        if (use_ground_thruth_data && ground_truth) {
             pose = ground_truth_pose;
             linear_velocity = ground_truth_linear_velocity;
         } else {
-	    pose = ukf->get_pose();
-	    linear_velocity = ukf->get_linear_velocity();
+            pose = ukf->get_pose();
+            linear_velocity = ukf->get_linear_velocity();
         }
     }
 
@@ -261,9 +301,10 @@ public:
     UAVController(ros::NodeHandle & nh) :
         ground_truth_time(0),
         previous_time(-1),
-        integral_idx(0) {
+        integral_idx(0),
+        newFile_(true){
 
-        use_ground_thruth_data = false;
+        use_ground_thruth_data = true;
 
         // ========= Constants ===================================//
         g = 9.8; // in rate_controller g = 9.81
@@ -282,11 +323,9 @@ public:
         Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
         T_imu_cam.setQuaternion(q);
         T_imu_cam.translation() << 0.03, -0.07, 0.1;
-	
-	// Init uncsented kallman filter
-	if (!use_ground_thruth_data) {
-	    ukf = new SE3UKF<_Scalar>(initial_pose, Vector3(0,0,0), Vector3(0,0,0), Vector3(0,0,0), initial_state_covariance);
-	}
+
+        // Init uncsented kallman filter
+        ukf = new SE3UKF<_Scalar>(initial_pose, Vector3(0,0,0), Vector3(0,0,0), Vector3(0,0,0), initial_state_covariance);
         // Init subscribers and publishers
         imu_sub = nh.subscribe("imu", 10, &UAVController<_Scalar>::imuCallback,
                                this);
@@ -315,15 +354,15 @@ public:
             ROS_FATAL("could not wake up gazebo");
             exit(-1);
         }
-        
-        ROS_INFO_STREAM("PID running with \n k_p = " << KP << ", k_d = " << KD << ", k_i = " << KI);        
+
+        ROS_INFO_STREAM("PID running with \n k_p = " << KP << ", k_d = " << KD << ", k_i = " << KI);
     }
 
     ~UAVController() {
-	if (ukf) {
-	    delete ukf;
-	    ukf=0;
-	}	
+        if (ukf) {
+            delete ukf;
+            ukf=0;
+        }
     }
 
     // TODO: exercise 1 e)
@@ -334,13 +373,18 @@ public:
         Vector3 desired_velocity = Vector3(0,0,0);
         SE3Type curr_pose;
         Vector3 curr_linear_velocity;
-        getPoseAndVelocity(curr_pose, curr_linear_velocity);
+        getPoseAndVelocity(curr_pose, curr_linear_velocity, true);
 
-
+	// gets pose and velocity on its own!
         Vector3 dforce = computeDesiredForce(desired_pose, desired_velocity, delta_time);
 
+	// gets pose and velocity from above
         command = computeCommandFromForce(dforce, curr_pose, delta_time);
         command_pub.publish(command);
+	
+	// output ukf
+	getPoseAndVelocity(curr_pose, curr_linear_velocity, false);
+	savePosition("ukf", curr_pose.translation(), ros::Time::now());
     }
 
 
