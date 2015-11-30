@@ -87,7 +87,7 @@ private:
     
     // Debug stuff
     bool newFile_;
-    std::string filename_;
+    std::string fileprefix_;
 
     mav_msgs::CommandAttitudeThrust command;
 
@@ -97,20 +97,21 @@ private:
 
     bool savePosition(const std::string &filename, const Vector3 t, const ros::Time timestamp) {
 
+	std::stringstream ss;
 	if (newFile_) {
 	    int idx = 0;
-	    std::stringstream ss;
 	    ss << filename << idx++;
 	    while ( FILE *file = fopen(ss.str().c_str(), "r") ) {
 		ss.str("");
 		ss << filename << idx++;
 	    }
-	    filename_ = ss.str();
+	    ss.str(""); ss << idx;
+	    fileprefix_ = ss.str();
 	    newFile_ = false;
 	}
-	    
+	ss.str(""); ss << filename << fileprefix_;
         std::ofstream file;
-        file.open(filename_.c_str(), std::ios::out | std::ios::app | std::ios::binary);
+        file.open(ss.str().c_str(), std::ios::out | std::ios::app | std::ios::binary);
         if (!file.is_open()) {
             ROS_ERROR_STREAM("Error opening " << filename << ".");
             return false;
@@ -174,6 +175,8 @@ private:
 
         ground_truth_pose = pose;
         ground_truth_time = msg->header.stamp.toSec();
+	
+	savePosition("truth", position, msg->header.stamp);
     }
 
     /**
@@ -196,9 +199,12 @@ private:
         tf::pointMsgToEigen(msg->pose.pose.position, position);
         tf::quaternionMsgToEigen(msg->pose.pose.orientation, orientation);
 
-        SE3Type pose(orientation, position);
-        // TODO: move pose to imu frame
+        SE3Type pose(orientation.cast<_Scalar>(), position.cast<_Scalar>());
+	
+        // move pose to imu frame
         pose = T_imu_cam * pose;
+	
+	savePosition("estimate", position, msg->header.stamp);
 	
         ukf->measurePose(pose, covariance);
     }

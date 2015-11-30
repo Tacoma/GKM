@@ -337,6 +337,8 @@ public:
         // p.12 l.54 + 55
         compute_mean_and_covariance();
 	// TODO: add noise
+	covariance_.template block<3,3>(3,3) += gyro_noise;
+	covariance_.template block<3,3>(6,6) += accel_noise;
     }
 
 
