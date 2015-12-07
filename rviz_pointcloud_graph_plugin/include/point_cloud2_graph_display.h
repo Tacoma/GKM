@@ -33,7 +33,7 @@
 #include <sensor_msgs/PointCloud2.h>
 
 #include "rviz/message_filter_display.h"
-#include <lsd_slam_msgs/keyframeMsg.h>
+//#include <lsd_slam_msgs/keyframeMsg.h>
 
 namespace rviz
 {
@@ -49,7 +49,7 @@ class PointCloudCommon;
  * If you set the channel's name to "rgb", it will interpret the channel as an integer rgb value, with r, g and b
  * all being 8 bits.
  */
-class PointCloud2GraphDisplay: public MessageFilterDisplay<lsd_slam_msgs::keyframeMsgConstPtr>
+class PointCloud2GraphDisplay: public MessageFilterDisplay<sensor_msgs::PointCloud2>
 {
 Q_OBJECT
 public:
@@ -68,7 +68,7 @@ protected:
   virtual void onInitialize();
 
   /** @brief Process a single message.  Overridden from MessageFilterDisplay. */
-  virtual void processMessage( const lsd_slam_msgs::keyframeMsgConstPtr &msg );
+  virtual void processMessage( const sensor_msgs::PointCloud2ConstPtr& cloud );
 
   IntProperty* queue_size_property_;
 
