@@ -1,0 +1,9 @@
+<library path="devel/lib/librviz_pointcloud_graph_plugin">
+  <class name="rviz/Pointcloud2-Graph"
+         type="rviz::PointCloud2GraphDisplay"
+         base_class_type="rviz::Display">
+    <description>
+      Displays Pointlcoud2 messages as graph in RViz.
+    </description>
+    <message_type>sensor_msgs/PointCloud2</message_type>
+</library>
