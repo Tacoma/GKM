@@ -1,0 +1,28 @@
+<package>
+  <name>rviz_pointcloud_graph_plugin</name>
+  <version>0.9.0</version>
+  <description>
+     pointcloud visualization
+  </description>
+  <maintainer email="bengrzimek@online.de">Benjamin Grzimek</maintainer>
+  <license>BSD</license>
+
+  <url>http://ros.org/wiki/rviz_plugin_tutorials</url>
+  <author>Benjamin Grzimek</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>rviz</build_depend>
+  <run_depend>rviz</run_depend>
+
+  <build_depend>sensor_msgs</build_depend>
+  <run_depend>sensor_msgs</run_depend>
+
+  <build_depend>lsd_slam_msgs</build_depend>
+  <run_depend>lsd_slam_msgs</run_depend>
+
+  <export>
+      <rosdoc config="${prefix}/rosdoc.yaml"/>
+      <rviz plugin="${prefix}/plugin_description.xml"/>
+  </export>
+</package>
