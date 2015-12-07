@@ -22,6 +22,7 @@ PcMeshBuilder::PcMeshBuilder() :
 {
     sub_pc_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::setFrom, this);
     pub_pc_ = nh_.advertise<MyPointCloud>("meshPc", 10);
+    pub_marker_ = nh_.advertise<visualization_msgs::Marker>("marker_normals", 0);
 
     initMarker();
 
@@ -35,7 +36,39 @@ PcMeshBuilder::~PcMeshBuilder()
 
 void PcMeshBuilder::initMarker()
 {
-    // TODO: Marker for normals
+    visualization_msgs::Marker marker;
+    marker.header.stamp = ros::Time();
+    marker.header.frame_id = "world";
+    marker.ns = "namespace_normals";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::ARROW;    // TBD: LINE_LIST may be yield better performance
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = 1;
+    marker.pose.position.y = 1;
+    marker.pose.position.z = 1;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    marker.color.a = 1.0;
+}
+
+void PcMeshBuilder::createNormal(geometry_msgs::Pose pose)
+{
+    marker_.header.stamp = ros::Time::now();
+    marker_.pose = pose;
+}
+
+void PcMeshBuilder::createNormal(Eigen::Matrix3f rotation, Eigen::Vector3f translation)
+{
+    marker_.header.stamp = ros::Time::now();
+//    marker_.pose = pose;
 }
 
 void PcMeshBuilder::setFrom(project::keyframeMsgConstPtr msg)

@@ -4,10 +4,14 @@
 #include <ros/ros.h>
 #include <Eigen/Core>
 #include <project/keyframeMsg.h>
+#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/Pose.h>
 #include "sophus/sim3.hpp"
 // pcl
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+// tf
+#include <tf/transform_broadcaster.h>
 
 typedef unsigned char uchar;
 typedef pcl::PointXYZRGB MyPoint;
@@ -35,14 +39,18 @@ public:
     void refreshPC();
     void findPlanes(const MyPointCloud& cloud_in);
     void initMarker();
+    void createNormal(geometry_msgs::Pose pose);
+    void createNormal(Eigen::Matrix3f rotation, Eigen::Vector3f translation);
     inline void colorPC(MyPointCloud& cloud_in, Eigen::Vector3f color);
 
     Sophus::Sim3f camToWorld_;
+    visualization_msgs::Marker marker_;
 
 private:
     ros::NodeHandle nh_;
     ros::Subscriber sub_pc_;    // lsd_slam/keyframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
+    ros::Publisher pub_marker_; // arrow markers used to visualize plane normals
 
     float fx_,fy_,cx_,cy_;
     float fxi_,fyi_,cxi_,cyi_;
