@@ -31,14 +31,25 @@
 #include <OgreSceneManager.h>
 
 #include <ros/time.h>
-
+// rviz
 #include "rviz/default_plugin/point_cloud_transformers.h"
 #include "rviz/display_context.h"
 #include "rviz/frame_manager.h"
 #include "rviz/ogre_helpers/point_cloud.h"
 #include "rviz/properties/int_property.h"
 #include "rviz/validate_floats.h"
+//pcl
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_ros/transforms.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 
+#include "sophus/sim3.hpp"
 #include "point_cloud2_graph_display.h"
 
 namespace rviz_cloud2_graph_display
@@ -227,7 +238,7 @@ void PointCloud2GraphDisplay::processMessage(const lsd_slam_msgs::keyframeMsgCon
 
     if (msg->isKeyframe) {
         // add message to queue
-        pcl::MyPointcloud::Ptr cloud = processPointcloud(msg);
+        MyPointcloud::Ptr cloud = processPointcloud(msg);
         createVisualObject(cloud);
     } else {
         // check for reset
@@ -239,11 +250,110 @@ void PointCloud2GraphDisplay::processMessage(const lsd_slam_msgs::keyframeMsgCon
     }
 }
 
-pcl::MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
-    // TODO
+MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+
+    Sophus::Sim3f camToWorld_;
+    memcpy(camToWorld_.data(), msg->camToWorld.data(), 7*sizeof(float));
+
+    float fx_ = msg->fx;
+    float fy_ = msg->fy;
+    float cx_ = msg->cx;
+    float cy_ = msg->cy;
+
+    float fxi_ = 1.0/fx_;
+    float fyi_ = 1.0/fy_;
+    float cxi_ = -cx_ / fx_;
+    float cyi_ = -cy_ / fy_;
+
+    int width_  = msg->width;
+    int height_ = msg->height;
+    unsigned int id_ = msg->id;
+    double time_ = msg->time;
+
+    InputPointDense* originalInput_ = 0;
+
+    if(msg->pointcloud.size() != width_*height_*sizeof(InputPointDense)) {
+        if(msg->pointcloud.size() != 0)
+            ROS_WARN_STREAM("PC with points, but number of points not right!");
+    } else {
+        originalInput_ = new InputPointDense[width_*height_];
+        memcpy(originalInput_, msg->pointcloud.data(), width_*height_*sizeof(InputPointDense));
+    }
+
+    if(originalInput_ == 0) {
+        ROS_ERROR_STREAM("originalInput_ was null");
+        return 0;
+    }
+
+    // TODO parameterize
+    const float scaledDepthVarTH = pow(10.0f,-3.0f);
+    const float absDepthVarTH = pow(10.0f, 1.0f);
+    const int minNearSupport = 7;
+    const int sparsifyFactor = 1;
+
+    float worldScale = camToWorld_.scale();
+
+    MyPointcloud::Ptr pc;
+    pc->resize(width_*height_);
+    int numPoints = 0;
+    for(int y=1; y<height_-1; y++) {
+        for(int x=1; x<width_-1; x++) {
+            if(originalInput_[x+y*width_].idepth <= 0)
+                continue;
+
+            if(sparsifyFactor > 1 && rand()%sparsifyFactor != 0)
+                continue;
+
+            float depth = 1 / originalInput_[x+y*width_].idepth;
+            float depth4 = depth*depth;
+            depth4*= depth4;
+
+            if(originalInput_[x+y*width_].idepth_var * depth4 > scaledDepthVarTH)
+                continue;
+
+            if(originalInput_[x+y*width_].idepth_var * depth4 * worldScale*worldScale > absDepthVarTH)
+                continue;
+
+            if(minNearSupport > 1) {
+                int nearSupport = 0;
+                for(int dx=-1; dx<2; dx++) {
+                    for(int dy=-1; dy<2; dy++) {
+                        int idx = x+dx+(y+dy)*width_;
+                        if(originalInput_[idx].idepth > 0) {
+                            float diff = originalInput_[idx].idepth - 1.0f / depth;
+                            if(diff*diff < 2*originalInput_[x+y*width_].idepth_var)
+                                nearSupport++;
+                        }
+                    }
+                }
+
+                if(nearSupport < minNearSupport)
+                    continue;
+            }
+
+            MyPoint point;
+            point.x = (x*fxi_ + cxi_) * depth;
+            point.y = (y*fyi_ + cyi_) * depth;
+            point.z = depth;
+            point.r = originalInput_[x+y*width_].color[2];
+            point.g = originalInput_[x+y*width_].color[1];
+            point.b = originalInput_[x+y*width_].color[0];
+            pc->points[numPoints] = point;
+
+            numPoints++;
+        }
+    }
+    // refit pointcloud and search for planes
+    pc->resize(numPoints);
+//    pcl::transformPointCloud(*pc,*pc,camToWorld_.matrix());
+//    findPlanes(pc);
+
+    delete[] originalInput_;
+
+    return pc;
 }
 
-void PointCloud2GraphDisplay::createVisualObject(pcl::MyPointcloud::Ptr cloud) {
+void PointCloud2GraphDisplay::createVisualObject(MyPointcloud::Ptr cloud) {
     // TODO
 }
 

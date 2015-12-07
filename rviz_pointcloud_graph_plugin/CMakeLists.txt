@@ -5,6 +5,7 @@ find_package(	catkin REQUIRED COMPONENTS
 		rviz
 		sensor_msgs
 		lsd_slam_msgs
+		pcl_ros
 )
 
 

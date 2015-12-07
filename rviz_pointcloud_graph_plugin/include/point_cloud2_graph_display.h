@@ -47,7 +47,14 @@
 
 typedef unsigned char uchar;
 typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::PointCloud<MyPoint> MyPointCloud;
+typedef pcl::PointCloud<MyPoint> MyPointcloud;
+
+struct InputPointDense
+{
+    float idepth;
+    float idepth_var;
+    uchar color[4];
+};
 
 
 namespace rviz_cloud2_graph_display
@@ -89,8 +96,8 @@ private:
   void subscribe();
   void unsubscribe();
 
-  pcl::MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-  void createVisualObject(pcl::MyPointcloud::Ptr cloud);
+  MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+  void createVisualObject(MyPointcloud::Ptr cloud);
 
   // ROS image subscription & synchronization
   ros::Subscriber liveframes_sub_; // keyframes messages
