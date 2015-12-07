@@ -105,7 +105,7 @@ private:
 		ss.str("");
 		ss << filename << idx++;
 	    }
-	    ss.str(""); ss << idx;
+	    ss.str(""); ss << --idx;
 	    fileprefix_ = ss.str();
 	    newFile_ = false;
 	}
@@ -202,11 +202,13 @@ private:
         SE3Type pose(orientation.cast<_Scalar>(), position.cast<_Scalar>());
 	
         // move pose to imu frame
-        pose = T_imu_cam * pose;
+        SE3Type pose1 =  pose * T_imu_cam.inverse();
+	//ROS_INFO_STREAM("Imu: " << T_imu_cam.matrix());
 	
-	savePosition("estimate", position, msg->header.stamp);
+	savePosition("estimate", pose.translation(), msg->header.stamp);
+	savePosition("estimate1", pose1.translation(), msg->header.stamp);
 	
-        ukf->measurePose(pose, covariance);
+        ukf->measurePose(pose1, measurement6d_noise);
     }
 
     // TODO: exercise 1 d)
@@ -310,7 +312,7 @@ public:
         integral_idx(0),
         newFile_(true){
 
-        use_ground_thruth_data = true;
+        use_ground_thruth_data = false;
 
         // ========= Constants ===================================//
         g = 9.8; // in rate_controller g = 9.81

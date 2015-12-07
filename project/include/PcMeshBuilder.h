@@ -6,6 +6,12 @@
 #include <project/keyframeMsg.h>
 #include "sophus/sim3.hpp"
 
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
+
+typedef pcl::PointXYZRGB MyPoint;
+typedef pcl::PointCloud<MyPoint> MyPointCloud;
+
 typedef unsigned char uchar;
 
 struct MyVertex
@@ -28,6 +34,7 @@ public:
 
     void setFrom(project::keyframeMsgConstPtr msg);
     void refreshPC();
+    void findPC(MyPointCloud cloud_in);
 
     Sophus::Sim3f camToWorld_;
 

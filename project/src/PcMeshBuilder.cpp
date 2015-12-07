@@ -3,14 +3,16 @@
 // pcl
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/transforms.h>
-#include <pcl_ros/point_cloud.h>
-#include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
+
 
 #include <iostream>
-
-typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::PointCloud<MyPoint> MyPointCloud;
 
 PcMeshBuilder::PcMeshBuilder() :
     originalInput_(0)
@@ -65,6 +67,52 @@ void PcMeshBuilder::setFrom(project::keyframeMsgConstPtr msg)
         refreshPC();
 }
 
+void PcMeshBuilder::findPC(MyPointCloud cloud_in) {
+
+    MyPointCloud::Ptr cropped_cloud(new MyPointCloud(cloud_in));
+    MyPointCloud::Ptr cloud_f (new MyPointCloud);
+    MyPointCloud::Ptr cloud_filtered (new MyPointCloud);
+    MyPointCloud::Ptr cloud_plane (new MyPointCloud ());
+
+    // Create the segmentation object for the planar model and set all the parameters
+    pcl::SACSegmentation<MyPoint> seg;
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+    seg.setOptimizeCoefficients (true);
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setMaxIterations (200);
+    seg.setDistanceThreshold (0.004);
+
+    // Segment the largest planar component from the cropped cloud
+    seg.setInputCloud (cropped_cloud);
+    seg.segment (*inliers, *coefficients);
+    if (inliers->indices.size () == 0)
+    {
+        ROS_WARN_STREAM ("Could not estimate a planar model for the given dataset.") ;
+        //break;
+    }
+
+
+    // Extract the planar inliers from the input cloud
+    pcl::ExtractIndices<MyPoint> extract;
+    extract.setInputCloud (cropped_cloud);
+    extract.setIndices(inliers);
+    extract.setNegative (false);
+
+    // Get the points associated with the planar surface
+    extract.filter (*cloud_plane);
+    ROS_INFO_STREAM("PointCloud representing the planar component: " << cloud_plane->points.size () << " data points." );
+
+    sensor_msgs::PointCloud2 msg;
+    pcl::toROSMsg(*cloud_plane,msg);
+    msg.header.stamp = ros::Time::now();
+    msg.header.frame_id = "world";
+
+    pub_pc_.publish(msg);
+
+}
+
 void PcMeshBuilder::refreshPC()
 {
     const float scaledDepthVarTH = 1.0f;
@@ -76,8 +124,8 @@ void PcMeshBuilder::refreshPC()
 
     MyPointCloud pc;
 
-    for(int y=1;y<height_-1;y++) {
-        for(int x=1;x<width_-1;x++) {
+    for(int y=1; y<height_-1; y++) {
+        for(int x=1; x<width_-1; x++) {
             if(originalInput_[x+y*width_].idepth <= 0)
                 continue;
 
@@ -85,7 +133,8 @@ void PcMeshBuilder::refreshPC()
                 continue;
 
             float depth = 1 / originalInput_[x+y*width_].idepth;
-            float depth4 = depth*depth; depth4*= depth4;
+            float depth4 = depth*depth;
+            depth4*= depth4;
 
             if(originalInput_[x+y*width_].idepth_var * depth4 > scaledDepthVarTH)
                 continue;
@@ -95,8 +144,8 @@ void PcMeshBuilder::refreshPC()
 
             if(minNearSupport > 1) {
                 int nearSupport = 0;
-                for(int dx=-1;dx<2;dx++) {
-                    for(int dy=-1;dy<2;dy++) {
+                for(int dx=-1; dx<2; dx++) {
+                    for(int dy=-1; dy<2; dy++) {
                         int idx = x+dx+(y+dy)*width_;
                         if(originalInput_[idx].idepth > 0) {
                             float diff = originalInput_[idx].idepth - 1.0f / depth;
@@ -145,7 +194,8 @@ void PcMeshBuilder::refreshPC()
     msg.header.stamp = ros::Time::now();
     msg.header.frame_id = "world";
 
-    pub_pc_.publish(msg);
+    findPC(pc);
+    //pub_pc_.publish(msg);
 }
 
 
