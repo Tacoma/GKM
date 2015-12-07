@@ -32,7 +32,6 @@
 
 #include <ros/time.h>
 
-#include "rviz/default_plugin/point_cloud_common.h"
 #include "rviz/default_plugin/point_cloud_transformers.h"
 #include "rviz/display_context.h"
 #include "rviz/frame_manager.h"
@@ -42,42 +41,93 @@
 
 #include "point_cloud2_graph_display.h"
 
-namespace rviz
+namespace rviz_cloud2_graph_display
 {
 
 PointCloud2GraphDisplay::PointCloud2GraphDisplay()
-    : point_cloud_common_template_( new PointCloudCommon( this ))
-{
-    queue_size_property_ = new IntProperty( "Queue Size", 10,
-                                            "Advanced: set the size of the incoming PointCloud2 message queue. "
-                                            " Increasing this is useful if your incoming TF data is delayed significantly "
-                                            "from your PointCloud2 data, but it can greatly increase memory usage if the messages are big.",
-                                            this, SLOT( updateQueueSize() ));
+    : point_cloud_common_template_( new rviz::PointCloudCommon( this )) {
+    pc_topic_property_ =
+        new rviz::RosTopicProperty("Pointcloud Topic", "",
+                                   QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
+                                   "lsd_slam/keyframe topic to subscribe to", this,
+                                   SLOT(updateTopic()));
 
-    // PointCloudCommon sets up a callback queue with a thread for each
-    // instance.  Use that for processing incoming messages.
-    //update_nh_.setCallbackQueue( point_cloud_common_template_->getCallbackQueue() );
+    oculus_cam_follow_topic_property_ =
+        new rviz::RosTopicProperty("Oculus camera topic", "",
+                                   QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
+                                   "lsd_slam/liveframes topic to in order to publish the camera position as tf-frame \"camera\".", this,
+                                   SLOT(updateTopic()));
+
+    graph_topic_property_ =
+        new rviz::RosTopicProperty("Graph Topic", "",
+                                   QString::fromStdString("lsd_slam_viewer/keyframeGraphMsg"),
+                                   "lsd_slam/graph topic to subscribe to", this,
+                                   SLOT(updateTopic()));
 }
 
-PointCloud2GraphDisplay::~PointCloud2GraphDisplay()
-{
+PointCloud2GraphDisplay::~PointCloud2GraphDisplay() {
     delete point_cloud_common_template_;
     point_cloud_common_vector_.clear();
 }
 
-void PointCloud2GraphDisplay::onInitialize()
-{
-    MFDClass::onInitialize();
+void PointCloud2GraphDisplay::onInitialize() {
+    Display::onInitialize(); // needed?
     point_cloud_common_template_->initialize( context_, scene_node_ );
 }
 
-void PointCloud2GraphDisplay::updateQueueSize()
-{
-    tf_filter_->setQueueSize( (uint32_t) queue_size_property_->getInt() );
+void PointCloud2GraphDisplay::onEnable() {
+    subscribe();
 }
 
-void PointCloud2GraphDisplay::processMessage( const sensor_msgs::PointCloud2ConstPtr& cloud )
-{
+void PointCloud2GraphDisplay::onDisable() {
+    unsubscribe();
+}
+
+void PointCloud2GraphDisplay::updateTopic() {
+    unsubscribe();
+    reset();
+    subscribe();
+    context_->queueRender(); // request new render
+}
+
+void PointCloud2GraphDisplay::subscribe() {
+    if (!isEnabled()) {
+        return;
+    }
+    try {
+        std::string pc_topic = pc_topic_property_->getTopicStd();
+        if (!pc_topic.empty()) {
+            //TODO: use boost version of callback
+            liveframes_sub_ = threaded_nh_.subscribe(pc_topic, 1, &PointCloud2GraphDisplay::processMessage, this);
+        }
+
+        std::string oculus_cam_topic = oculus_cam_follow_topic_property_->getTopicStd();
+        if (!oculus_cam_topic.empty()) {
+            oculus_cam_sub_ = threaded_nh_.subscribe(oculus_cam_topic, 1, &PointCloud2GraphDisplay::processMessage, this);
+        }
+
+        std::string graph_topic = graph_topic_property_->getTopicStd();
+        if (!graph_topic.empty()) {
+            graph_sub_ = threaded_nh_.subscribe(graph_topic, 1, &PointCloud2GraphDisplay::processGraphMessage, this);
+        }
+    } catch (ros::Exception& e) {
+        setStatus(rviz::StatusProperty::Error, "Message",
+                  QString("Error subscribing: ") + e.what());
+    }
+}
+
+void PointCloud2GraphDisplay::unsubscribe() {
+    try {
+        liveframes_sub_.shutdown();
+        oculus_cam_sub_.shutdown();
+        graph_sub_.shutdown();
+    } catch (ros::Exception& e) {
+        setStatus(rviz::StatusProperty::Error, "Message",
+                  QString("Error unsubscribing: ") + e.what());
+    }
+}
+
+//void PointCloud2GraphDisplay::processMessage( const lsd_slam_msgs::keyframeMsgConstPtr& msg ) {
 //     // Filter any nan values out of the cloud.  Any nan values that make it through to PointCloudBase
 //     // will get their points put off in lala land, but it means they still do get processed/rendered
 //     // which can be a big performance hit
@@ -162,13 +212,44 @@ void PointCloud2GraphDisplay::processMessage( const sensor_msgs::PointCloud2Cons
 //     filtered->row_step = output_count;
 // 
 // 
-//     PointCloudCommon* point_cloud_common_instance = new PointCloudCommon( this );
+//     rviz::PointCloudCommon* point_cloud_common_instance = new rviz::PointCloudCommon( this );
 //     point_cloud_common_instance->initialize( context_, scene_node_);
 // 
 //     point_cloud_common_instance->addMessage( filtered );
 //     point_cloud_common_vector_.push_back(point_cloud_common_instance);
+//}
+
+void PointCloud2GraphDisplay::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+
+    if (context_->getFrameManager()->getPause()) {
+        return;
+    }
+
+    if (msg->isKeyframe) {
+        // add message to queue
+        pcl::MyPointcloud::Ptr cloud = processPointcloud(msg);
+        createVisualObject(cloud);
+    } else {
+        // check for reset
+        if (last_frame_id > msg->id) {
+            ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id << " to " << msg->id << "), resetting!");
+            reset();
+        }
+        last_frame_id = msg->id;
+    }
 }
 
+pcl::MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+    // TODO
+}
+
+void PointCloud2GraphDisplay::createVisualObject(pcl::MyPointcloud::Ptr cloud) {
+    // TODO
+}
+
+void PointCloud2GraphDisplay::processGraphMessage(const lsd_slam_msgs::keyframeGraphMsgConstPtr msg) {
+    // TODO
+}
 
 void PointCloud2GraphDisplay::update( float wall_dt, float ros_dt )
 {
@@ -180,12 +261,12 @@ void PointCloud2GraphDisplay::update( float wall_dt, float ros_dt )
 
 void PointCloud2GraphDisplay::reset()
 {
-    MFDClass::reset();
+    Display::reset();
     point_cloud_common_vector_.clear();
 //    point_cloud_common_->reset();
 }
 
-} // namespace rviz
+} // namespace rviz_cloud2_graph_display
 
 #include <pluginlib/class_list_macros.h>
-PLUGINLIB_EXPORT_CLASS( rviz::PointCloud2GraphDisplay, rviz::Display )
+PLUGINLIB_EXPORT_CLASS( rviz_cloud2_graph_display::PointCloud2GraphDisplay, rviz::Display )

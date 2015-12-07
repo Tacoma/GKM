@@ -32,15 +32,26 @@
 
 #include <sensor_msgs/PointCloud2.h>
 
+// rivz
 #include "rviz/message_filter_display.h"
-//#include <lsd_slam_msgs/keyframeMsg.h>
+#include <rviz/properties/float_property.h>
+#include <rviz/properties/int_property.h>
+#include <rviz/properties/quaternion_property.h>
+#include "rviz/default_plugin/point_cloud_common.h"
+// msgs
+#include <lsd_slam_msgs/keyframeMsg.h>
+#include <lsd_slam_msgs/keyframeGraphMsg.h>
+// pcl
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
 
-namespace rviz
+typedef unsigned char uchar;
+typedef pcl::PointXYZRGB MyPoint;
+typedef pcl::PointCloud<MyPoint> MyPointCloud;
+
+
+namespace rviz_cloud2_graph_display
 {
-
-class IntProperty;
-class PointCloudCommon;
-
 /**
  * \class PointCloud2GraphDisplay
  * \brief Displays a point cloud of type sensor_msgs::PointCloud2
@@ -49,33 +60,62 @@ class PointCloudCommon;
  * If you set the channel's name to "rgb", it will interpret the channel as an integer rgb value, with r, g and b
  * all being 8 bits.
  */
-class PointCloud2GraphDisplay: public MessageFilterDisplay<sensor_msgs::PointCloud2>
+class PointCloud2GraphDisplay: public rviz::Display
 {
 Q_OBJECT
 public:
   PointCloud2GraphDisplay();
   ~PointCloud2GraphDisplay();
 
-  virtual void reset();
-
-  virtual void update( float wall_dt, float ros_dt );
+  virtual void update( float wall_dt, float ros_dt );  
 
 private Q_SLOTS:
-  void updateQueueSize();
+  virtual void updateTopic();
 
 protected:
-  /** @brief Do initialization. Overridden from MessageFilterDisplay. */
   virtual void onInitialize();
+  virtual void reset();
+  void onEnable();
+  void onDisable();
 
-  /** @brief Process a single message.  Overridden from MessageFilterDisplay. */
-  virtual void processMessage( const sensor_msgs::PointCloud2ConstPtr& cloud );
 
-  IntProperty* queue_size_property_;
+  /** @brief Process a single message.  Overridden from Display. */
+  virtual void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr& msg);
 
-  PointCloudCommon* point_cloud_common_template_;
-  std::vector<PointCloudCommon*> point_cloud_common_vector_;
+private:
+  void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+  void processGraphMessage(const lsd_slam_msgs::keyframeGraphMsgConstPtr msg);
+
+  void subscribe();
+  void unsubscribe();
+
+  pcl::MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+  void createVisualObject(pcl::MyPointcloud::Ptr cloud);
+
+  // ROS image subscription & synchronization
+  ros::Subscriber liveframes_sub_; // keyframes messages
+  ros::Subscriber graph_sub_;      // graph messages
+  ros::Subscriber oculus_cam_sub_; // live frame messages
+
+  // ROS properties
+  rviz::IntProperty*      depth_subsample_property_;
+  rviz::RosTopicProperty* pc_topic_property_;
+  rviz::RosTopicProperty* graph_topic_property_;
+  rviz::RosTopicProperty* oculus_cam_follow_topic_property_;
+  rviz::BoolProperty*     cam_marker_visible_property_;
+  rviz::FloatProperty*    scaledDepthVarTH_property_;
+  rviz::IntProperty*      minNearSupp_property_;
+  rviz::QuaternionProperty* orientation_property_;
+  rviz::BoolProperty*     button_property_;
+  rviz::BoolProperty*	    delete_original_msgs_property_;
+
+  rviz::PointCloudCommon* point_cloud_common_template_;
+  std::vector<rviz::PointCloudCommon*> point_cloud_common_vector_;
+  std::vector<MyPointcloud::Ptr> clouds_vector_;
+
+  int last_frame_id;
 };
 
-} // namespace rviz
+} // namespace rviz_cloud2_graph_display
 
 #endif
