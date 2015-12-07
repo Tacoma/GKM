@@ -5,14 +5,13 @@
 #include <Eigen/Core>
 #include <project/keyframeMsg.h>
 #include "sophus/sim3.hpp"
-
+// pcl
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 
+typedef unsigned char uchar;
 typedef pcl::PointXYZRGB MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointCloud;
-
-typedef unsigned char uchar;
 
 struct MyVertex
 {
@@ -34,14 +33,16 @@ public:
 
     void setFrom(project::keyframeMsgConstPtr msg);
     void refreshPC();
-    void findPC(MyPointCloud cloud_in);
+    void findPlanes(const MyPointCloud& cloud_in);
+    void initMarker();
+    inline void colorPC(MyPointCloud& cloud_in, Eigen::Vector3f color);
 
     Sophus::Sim3f camToWorld_;
 
 private:
     ros::NodeHandle nh_;
-    ros::Subscriber sub_pc_;
-    ros::Publisher pub_pc_; // maybe need a method to publish meshes for ros
+    ros::Subscriber sub_pc_;    // lsd_slam/keyframes
+    ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
 
     float fx_,fy_,cx_,cy_;
     float fxi_,fyi_,cxi_,cyi_;

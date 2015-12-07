@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   eigen_conversions
   message_generation
+  visualization_msgs
 )
 
 #find_package(Eigen REQUIRED)

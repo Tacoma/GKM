@@ -11,8 +11,11 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 
-
 #include <iostream>
+
+const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0), Eigen::Vector3f(0,128,0), Eigen::Vector3f(0,0,128),
+                                        Eigen::Vector3f(128,128,0), Eigen::Vector3f(128,0,128), Eigen::Vector3f(0,128,128), Eigen::Vector3f(128,128,128)};
+
 
 PcMeshBuilder::PcMeshBuilder() :
     originalInput_(0)
@@ -20,12 +23,19 @@ PcMeshBuilder::PcMeshBuilder() :
     sub_pc_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::setFrom, this);
     pub_pc_ = nh_.advertise<MyPointCloud>("meshPc", 10);
 
+    initMarker();
+
     std::cout << "PcMeshBuilder started..." << std::endl;
 }
 
 PcMeshBuilder::~PcMeshBuilder()
 {
     delete[] originalInput_;
+}
+
+void PcMeshBuilder::initMarker()
+{
+    // TODO: Marker for normals
 }
 
 void PcMeshBuilder::setFrom(project::keyframeMsgConstPtr msg)
@@ -67,63 +77,90 @@ void PcMeshBuilder::setFrom(project::keyframeMsgConstPtr msg)
         refreshPC();
 }
 
-void PcMeshBuilder::findPC(MyPointCloud cloud_in) {
+inline void PcMeshBuilder::colorPC(MyPointCloud& cloud_in, Eigen::Vector3f color)
+{
+    for(int i=0; i<cloud_in.points.size(); i++) {
+        cloud_in.points[i].r = color.x();
+        cloud_in.points[i].g = color.y();
+        cloud_in.points[i].b = color.z();
+    }
+}
+
+void PcMeshBuilder::findPlanes(const MyPointCloud& cloud_in)
+{
+    MyPointCloud::Ptr union_cloud(new MyPointCloud);
 
     MyPointCloud::Ptr cropped_cloud(new MyPointCloud(cloud_in));
-    MyPointCloud::Ptr cloud_f (new MyPointCloud);
-    MyPointCloud::Ptr cloud_filtered (new MyPointCloud);
-    MyPointCloud::Ptr cloud_plane (new MyPointCloud ());
+    MyPointCloud::Ptr cloud_f(new MyPointCloud);
+    MyPointCloud::Ptr cloud_filtered(new MyPointCloud);
+    MyPointCloud::Ptr cloud_plane(new MyPointCloud());
 
-    // Create the segmentation object for the planar model and set all the parameters
+    // create the segmentation object for the planar model and set all the parameters
     pcl::SACSegmentation<MyPoint> seg;
-    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-    seg.setOptimizeCoefficients (true);
-    seg.setModelType (pcl::SACMODEL_PLANE);
-    seg.setMethodType (pcl::SAC_RANSAC);
-    seg.setMaxIterations (200);
-    seg.setDistanceThreshold (0.004);
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(100);
+    seg.setDistanceThreshold(0.008);
 
-    // Segment the largest planar component from the cropped cloud
-    seg.setInputCloud (cropped_cloud);
-    seg.segment (*inliers, *coefficients);
-    if (inliers->indices.size () == 0)
-    {
-        ROS_WARN_STREAM ("Could not estimate a planar model for the given dataset.") ;
-        //break;
-    }
-
-
-    // Extract the planar inliers from the input cloud
+    // extract the planar inliers from the input cloud
     pcl::ExtractIndices<MyPoint> extract;
-    extract.setInputCloud (cropped_cloud);
-    extract.setIndices(inliers);
-    extract.setNegative (false);
+    int i=0;
+    int nr_points = (int)cropped_cloud->points.size();
+    while (cropped_cloud->points.size() > 0.3*nr_points) {
+        // segment the largest planar component from the cropped cloud
+        seg.setInputCloud(cropped_cloud);
+        seg.segment(*inliers, *coefficients);
+        if(inliers->indices.size () == 0) {
+            ROS_WARN_STREAM ("Could not estimate a planar model for the given pointcloud data");
+            break;
+        }
 
-    // Get the points associated with the planar surface
-    extract.filter (*cloud_plane);
-    ROS_INFO_STREAM("PointCloud representing the planar component: " << cloud_plane->points.size () << " data points." );
+        // extract the inliers
+        extract.setInputCloud(cropped_cloud);
+        extract.setIndices(inliers);
+        extract.setNegative(false);
+        // get the points associated with the planar surface
+        extract.filter(*cloud_plane);
 
+        // recolor the extracted pointcloud for debug visualization
+        colorPC(*cloud_plane, debugColors[i%(sizeof(debugColors)/sizeof(Eigen::Vector3f))]);
+        // add newly created pointcloud in the union pointcloud
+        *union_cloud += *cloud_plane;
+
+        // create the filtering object
+        extract.setNegative(true);
+        extract.filter(*cloud_filtered);
+        cropped_cloud.swap(cloud_filtered);
+
+        i++;
+    }
+    // add non planar point clouds to the union pointcloud with a white color
+    *union_cloud += *cloud_filtered;
+
+    // send pc2 msg to rviz
     sensor_msgs::PointCloud2 msg;
-    pcl::toROSMsg(*cloud_plane,msg);
+    pcl::toROSMsg(*union_cloud,msg);
     msg.header.stamp = ros::Time::now();
     msg.header.frame_id = "world";
 
     pub_pc_.publish(msg);
-
 }
 
 void PcMeshBuilder::refreshPC()
 {
-    const float scaledDepthVarTH = 1.0f;
-    const float absDepthVarTH = 1.0f;
-    const int minNearSupport = 0;
+    const float scaledDepthVarTH = pow(10.0f,-3.0f);
+    const float absDepthVarTH = pow(10.0f, 1.0f);
+    const int minNearSupport = 7;
     const int sparsifyFactor = 1;
 
     float worldScale = camToWorld_.scale();
 
     MyPointCloud pc;
-
+    pc.resize(width_*height_);
+    int numPoints = 0;
     for(int y=1; y<height_-1; y++) {
         for(int x=1; x<width_-1; x++) {
             if(originalInput_[x+y*width_].idepth <= 0)
@@ -166,36 +203,15 @@ void PcMeshBuilder::refreshPC()
             point.r = originalInput_[x+y*width_].color[2];
             point.g = originalInput_[x+y*width_].color[1];
             point.b = originalInput_[x+y*width_].color[0];
-            pc.points.push_back(point);
+            pc.points[numPoints] = point;
+
+            numPoints++;
         }
     }
-
-    //// planar segmentation test ////
-//    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-//    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-//    // create the segmentation object
-//    pcl::SACSegmentation<pcl::PointXYZ> seg;
-//    // optional
-////    seg.setOptimizeCoefficients(true);
-//    // mandatory
-//    seg.setModelType (pcl::SACMODEL_PLANE);
-//    seg.setMethodType (pcl::SAC_RANSAC);
-//    seg.setDistanceThreshold (0.01);
-
-//    seg.setInputCloud(pc);
-//    seg.segment(*inliers, *coefficients);
-
-//    if (inliers->indices.size () == 0)
-//        ROS_ERROR("Could not estimate a planar model for the given dataset.");
-
-    // send pc as msg
-    sensor_msgs::PointCloud2 msg;
-    pcl::toROSMsg(pc,msg);
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = "world";
-
-    findPC(pc);
-    //pub_pc_.publish(msg);
+    // refit pointcloud and search for planes
+    pc.resize(numPoints);
+    pcl::transformPointCloud(pc,pc,camToWorld_.matrix());
+    findPlanes(pc);
 }
 
 
