@@ -95,6 +95,9 @@ private:
 
     MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void createCloudVisual(MyPointcloud::Ptr cloud);
+    MyPointcloud::Ptr findPlanes(MyPointcloud::Ptr cloud_in);
+
+    inline void colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector3f color);
 
     // ROS image subscription & synchronization
     ros::Subscriber liveframes_sub_; // keyframes messages
@@ -113,7 +116,6 @@ private:
     rviz::BoolProperty*       button_property_;
     rviz::BoolProperty*       delete_original_msgs_property_;
 
-    rviz::PointCloudCommon* point_cloud_common_template_;
     std::vector<rviz::PointCloudCommon*> point_cloud_common_vector_;
     std::vector<MyPointcloud::Ptr> clouds_vector_;
 

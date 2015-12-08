@@ -52,11 +52,19 @@
 #include "sophus/sim3.hpp"
 #include "point_cloud2_graph_display.h"
 
+
+const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0),
+                                        Eigen::Vector3f(0,128,0),
+                                        Eigen::Vector3f(0,0,128),
+                                        Eigen::Vector3f(128,128,0),
+                                        Eigen::Vector3f(128,0,128),
+                                        Eigen::Vector3f(0,128,128),
+                                        Eigen::Vector3f(128,128,128)};
+
 namespace rviz_cloud2_graph_display
 {
 
-PointCloud2GraphDisplay::PointCloud2GraphDisplay()
-    : point_cloud_common_template_( new rviz::PointCloudCommon( this )) {
+PointCloud2GraphDisplay::PointCloud2GraphDisplay() {
     pc_topic_property_ =
         new rviz::RosTopicProperty("Pointcloud Topic", "",
                                    QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
@@ -64,7 +72,7 @@ PointCloud2GraphDisplay::PointCloud2GraphDisplay()
                                    SLOT(updateTopic()));
 
     oculus_cam_follow_topic_property_ =
-        new rviz::RosTopicProperty("Oculus camera topic", "",
+        new rviz::RosTopicProperty("Follow camera topic", "",
                                    QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
                                    "lsd_slam/liveframes topic to in order to publish the camera position as tf-frame \"camera\".", this,
                                    SLOT(updateTopic()));
@@ -77,13 +85,11 @@ PointCloud2GraphDisplay::PointCloud2GraphDisplay()
 }
 
 PointCloud2GraphDisplay::~PointCloud2GraphDisplay() {
-    delete point_cloud_common_template_;
     point_cloud_common_vector_.clear();
 }
 
 void PointCloud2GraphDisplay::onInitialize() {
     Display::onInitialize(); // needed?
-    point_cloud_common_template_->initialize( context_, scene_node_ );
 }
 
 void PointCloud2GraphDisplay::fixedFrameChanged() {
@@ -94,7 +100,6 @@ void PointCloud2GraphDisplay::reset()
 {
     Display::reset();
     point_cloud_common_vector_.clear();
-//    point_cloud_common_->reset();
 }
 
 void PointCloud2GraphDisplay::onEnable() {
@@ -119,7 +124,6 @@ void PointCloud2GraphDisplay::subscribe() {
     try {
         std::string pc_topic = pc_topic_property_->getTopicStd();
         if (!pc_topic.empty()) {
-            //TODO: use boost version of callback
             liveframes_sub_ = threaded_nh_.subscribe(pc_topic, 1, &PointCloud2GraphDisplay::processMessage, this);
         }
 
@@ -149,100 +153,6 @@ void PointCloud2GraphDisplay::unsubscribe() {
     }
 }
 
-/*
-void PointCloud2GraphDisplay::processMessage( const lsd_slam_msgs::keyframeMsgConstPtr& cloud ) {
-     // Filter any nan values out of the cloud.  Any nan values that make it through to PointCloudBase
-     // will get their points put off in lala land, but it means they still do get processed/rendered
-     // which can be a big performance hit
-     sensor_msgs::PointCloud2Ptr filtered(new sensor_msgs::PointCloud2);
-     int32_t xi = findChannelIndex(cloud, "x");
-     int32_t yi = findChannelIndex(cloud, "y");
-     int32_t zi = findChannelIndex(cloud, "z");
-
-     if (xi == -1 || yi == -1 || zi == -1)
-     {
-         return;
-     }
-
-     const uint32_t xoff = cloud->fields[xi].offset;
-     const uint32_t yoff = cloud->fields[yi].offset;
-     const uint32_t zoff = cloud->fields[zi].offset;
-     const uint32_t point_step = cloud->point_step;
-     const size_t point_count = cloud->width * cloud->height;
-
-     if( point_count * point_step != cloud->data.size() )
-     {
-         std::stringstream ss;
-         ss << "Data size (" << cloud->data.size() << " bytes) does not match width (" << cloud->width
-            << ") times height (" << cloud->height << ") times point_step (" << point_step << ").  Dropping message.";
-         setStatusStd( StatusProperty::Error, "Message", ss.str() );
-         return;
-     }
-
-     filtered->data.resize(cloud->data.size());
-     if (point_count == 0)
-     {
-         return;
-     }
-
-     uint8_t* output_ptr = &filtered->data.front();
-     const uint8_t* ptr = &cloud->data.front(), *ptr_end = &cloud->data.back(), *ptr_init;
-     size_t points_to_copy = 0;
-     for (; ptr < ptr_end; ptr += point_step)
-     {
-         float x = *reinterpret_cast<const float*>(ptr + xoff);
-         float y = *reinterpret_cast<const float*>(ptr + yoff);
-         float z = *reinterpret_cast<const float*>(ptr + zoff);
-         if (validateFloats(x) && validateFloats(y) && validateFloats(z))
-         {
-             if (points_to_copy == 0)
-             {
-                 // Only memorize where to start copying from
-                 ptr_init = ptr;
-                 points_to_copy = 1;
-             }
-             else
-             {
-                 ++points_to_copy;
-             }
-         }
-         else
-         {
-             if (points_to_copy)
-             {
-                 // Copy all the points that need to be copied
-                 memcpy(output_ptr, ptr_init, point_step*points_to_copy);
-                 output_ptr += point_step*points_to_copy;
-                 points_to_copy = 0;
-             }
-         }
-     }
-     // Don't forget to flush what needs to be copied
-     if (points_to_copy)
-     {
-         memcpy(output_ptr, ptr_init, point_step*points_to_copy);
-         output_ptr += point_step*points_to_copy;
-     }
-     uint32_t output_count = (output_ptr - &filtered->data.front()) / point_step;
-
-     filtered->header = cloud->header;
-     filtered->fields = cloud->fields;
-     filtered->data.resize(output_count * point_step);
-     filtered->height = 1;
-     filtered->width = output_count;
-     filtered->is_bigendian = cloud->is_bigendian;
-     filtered->point_step = point_step;
-     filtered->row_step = output_count;
-
-
-     rviz::PointCloudCommon* point_cloud_common_instance = new rviz::PointCloudCommon( this );
-     point_cloud_common_instance->initialize( context_, scene_node_);
-
-     point_cloud_common_instance->addMessage( filtered );
-     point_cloud_common_vector_.push_back(point_cloud_common_instance);
-}
-*/
-
 void PointCloud2GraphDisplay::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
 
     if (context_->getFrameManager()->getPause()) {
@@ -252,7 +162,10 @@ void PointCloud2GraphDisplay::processMessage(const lsd_slam_msgs::keyframeMsgCon
     if (msg->isKeyframe) {
         // add message to queue
         MyPointcloud::Ptr cloud = processPointcloud(msg);
-        createCloudVisual(cloud);
+        cloud = findPlanes(cloud);
+        if(cloud) {
+            createCloudVisual(cloud);
+        }
     } else {
         // check for reset
         if (last_frame_id > msg->id) {
@@ -280,8 +193,8 @@ MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs
 
     int width_  = msg->width;
     int height_ = msg->height;
-    unsigned int id_ = msg->id;
-    double time_ = msg->time;
+//    unsigned int id_ = msg->id;
+//    double time_ = msg->time;
 
     InputPointDense* originalInput_ = 0;
 
@@ -306,7 +219,7 @@ MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs
 
     float worldScale = camToWorld_.scale();
 
-    MyPointcloud::Ptr pc;
+    MyPointcloud::Ptr pc = boost::make_shared<MyPointcloud>();
     pc->resize(width_*height_);
     int numPoints = 0;
     for(int y=1; y<height_-1; y++) {
@@ -358,7 +271,7 @@ MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs
     }
     // refit pointcloud and search for planes
     pc->resize(numPoints);
-//    pcl::transformPointCloud(*pc,*pc,camToWorld_.matrix());
+    pcl::transformPointCloud(*pc,*pc,camToWorld_.matrix());
 //    findPlanes(pc);
 
     delete[] originalInput_;
@@ -367,7 +280,7 @@ MyPointcloud::Ptr PointCloud2GraphDisplay::processPointcloud(const lsd_slam_msgs
 }
 
 void PointCloud2GraphDisplay::createCloudVisual(MyPointcloud::Ptr cloud) {
-    sensor_msgs::PointCloud2::Ptr msg;
+    sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
     pcl::toROSMsg(*cloud, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = "world";
@@ -379,6 +292,70 @@ void PointCloud2GraphDisplay::createCloudVisual(MyPointcloud::Ptr cloud) {
     point_cloud_common_vector_.push_back(point_cloud_common_instance);
 }
 
+MyPointcloud::Ptr PointCloud2GraphDisplay::findPlanes(MyPointcloud::Ptr cloud_in) {
+    MyPointcloud::Ptr union_cloud(new MyPointcloud);
+
+    MyPointcloud::Ptr cropped_cloud(new MyPointcloud(*cloud_in));
+    MyPointcloud::Ptr cloud_f(new MyPointcloud);
+    MyPointcloud::Ptr cloud_filtered(new MyPointcloud);
+    MyPointcloud::Ptr cloud_plane(new MyPointcloud);
+
+    // create the segmentation object for the planar model and set all the parameters
+    pcl::SACSegmentation<MyPoint> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(100);
+    seg.setDistanceThreshold(0.01);
+
+    // extract the planar inliers from the input cloud
+    pcl::ExtractIndices<MyPoint> extract;
+    int i=0;
+    int nr_points = (int)cropped_cloud->points.size();
+    while (cropped_cloud->points.size() > 0.3*nr_points) {
+        // segment the largest planar component from the cropped cloud
+        seg.setInputCloud(cropped_cloud);
+        seg.segment(*inliers, *coefficients);
+        if(inliers->indices.size () == 0) {
+            ROS_WARN_STREAM ("Could not estimate a planar model for the given pointcloud data");
+            break;
+        }
+
+        // extract the inliers
+        extract.setInputCloud(cropped_cloud);
+        extract.setIndices(inliers);
+        extract.setNegative(false);
+        // get the points associated with the planar surface
+        extract.filter(*cloud_plane);
+
+        // recolor the extracted pointcloud for debug visualization
+        colorPointcloud(*cloud_plane, debugColors[i%(sizeof(debugColors)/sizeof(Eigen::Vector3f))]);
+        // add newly created pointcloud in the union pointcloud
+        *union_cloud += *cloud_plane;
+
+        // create the filtering object
+        extract.setNegative(true);
+        extract.filter(*cloud_filtered);
+        cropped_cloud.swap(cloud_filtered);
+
+        i++;
+    }
+    // add non planar point clouds to the union pointcloud with a white color
+    *union_cloud += *cloud_filtered;
+
+    return union_cloud;
+}
+
+inline void PointCloud2GraphDisplay::colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector3f color) {
+    for(int i=0; i<cloud_in.points.size(); i++) {
+        cloud_in.points[i].r = color.x();
+        cloud_in.points[i].g = color.y();
+        cloud_in.points[i].b = color.z();
+    }
+}
+
 void PointCloud2GraphDisplay::processGraphMessage(const lsd_slam_msgs::keyframeGraphMsgConstPtr msg) {
     // TODO
 }
@@ -388,7 +365,6 @@ void PointCloud2GraphDisplay::update( float wall_dt, float ros_dt )
     for ( auto& point_cloud_common : point_cloud_common_vector_) {
         point_cloud_common->update( wall_dt, ros_dt );
     }
-
 }
 
 } // namespace rviz_cloud2_graph_display

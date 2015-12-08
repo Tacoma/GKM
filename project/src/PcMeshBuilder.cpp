@@ -136,7 +136,7 @@ void PcMeshBuilder::findPlanes(const MyPointCloud& cloud_in)
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
-    seg.setDistanceThreshold(0.008);
+    seg.setDistanceThreshold(0.01);
 
     // extract the planar inliers from the input cloud
     pcl::ExtractIndices<MyPoint> extract;
@@ -243,7 +243,7 @@ void PcMeshBuilder::refreshPC()
     }
     // refit pointcloud and search for planes
     pc.resize(numPoints);
-    pcl::transformPointCloud(pc,pc,camToWorld_.matrix());
+    //pcl::transformPointCloud(pc,pc,camToWorld_.matrix());
     findPlanes(pc);
 }
 
