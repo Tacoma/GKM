@@ -71,58 +71,55 @@ class PointCloud2GraphDisplay: public rviz::Display
 {
 Q_OBJECT
 public:
-  PointCloud2GraphDisplay();
-  ~PointCloud2GraphDisplay();
+    PointCloud2GraphDisplay();
+    ~PointCloud2GraphDisplay();
 
-  virtual void update( float wall_dt, float ros_dt );  
+    virtual void update( float wall_dt, float ros_dt );
 
 private Q_SLOTS:
-  virtual void updateTopic();
+    virtual void updateTopic();
 
 protected:
-  virtual void onInitialize();
-  virtual void reset();
-  void onEnable();
-  void onDisable();
-
-
-  /** @brief Process a single message.  Overridden from Display. */
-  virtual void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr& msg);
+    virtual void onInitialize();
+    virtual void reset();
+    virtual void fixedFrameChanged();
+    void onEnable();
+    void onDisable();
 
 private:
-  void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-  void processGraphMessage(const lsd_slam_msgs::keyframeGraphMsgConstPtr msg);
+    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    void processGraphMessage(const lsd_slam_msgs::keyframeGraphMsgConstPtr msg);
 
-  void subscribe();
-  void unsubscribe();
+    void subscribe();
+    void unsubscribe();
 
-  MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-  void createVisualObject(MyPointcloud::Ptr cloud);
+    MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    void createCloudVisual(MyPointcloud::Ptr cloud);
 
-  // ROS image subscription & synchronization
-  ros::Subscriber liveframes_sub_; // keyframes messages
-  ros::Subscriber graph_sub_;      // graph messages
-  ros::Subscriber oculus_cam_sub_; // live frame messages
+    // ROS image subscription & synchronization
+    ros::Subscriber liveframes_sub_; // keyframes messages
+    ros::Subscriber graph_sub_;      // graph messages
+    ros::Subscriber oculus_cam_sub_; // live frame messages
 
-  // ROS properties
-  rviz::IntProperty*      depth_subsample_property_;
-  rviz::RosTopicProperty* pc_topic_property_;
-  rviz::RosTopicProperty* graph_topic_property_;
-  rviz::RosTopicProperty* oculus_cam_follow_topic_property_;
-  rviz::BoolProperty*     cam_marker_visible_property_;
-  rviz::FloatProperty*    scaledDepthVarTH_property_;
-  rviz::IntProperty*      minNearSupp_property_;
-  rviz::QuaternionProperty* orientation_property_;
-  rviz::BoolProperty*     button_property_;
-  rviz::BoolProperty*	    delete_original_msgs_property_;
+    // ROS properties
+    rviz::IntProperty*        depth_subsample_property_;
+    rviz::RosTopicProperty*   pc_topic_property_;
+    rviz::RosTopicProperty*   graph_topic_property_;
+    rviz::RosTopicProperty*   oculus_cam_follow_topic_property_;
+    rviz::BoolProperty*       cam_marker_visible_property_;
+    rviz::FloatProperty*      scaledDepthVarTH_property_;
+    rviz::IntProperty*        minNearSupp_property_;
+    rviz::QuaternionProperty* orientation_property_;
+    rviz::BoolProperty*       button_property_;
+    rviz::BoolProperty*       delete_original_msgs_property_;
 
-  rviz::PointCloudCommon* point_cloud_common_template_;
-  std::vector<rviz::PointCloudCommon*> point_cloud_common_vector_;
-  std::vector<MyPointcloud::Ptr> clouds_vector_;
+    rviz::PointCloudCommon* point_cloud_common_template_;
+    std::vector<rviz::PointCloudCommon*> point_cloud_common_vector_;
+    std::vector<MyPointcloud::Ptr> clouds_vector_;
 
-  int last_frame_id;
+    int last_frame_id;
 };
 
 } // namespace rviz_cloud2_graph_display
 
-#endif
+#endif // RVIZ_POINT_CLOUD2_DISPLAY_H
