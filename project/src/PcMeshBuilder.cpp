@@ -19,8 +19,8 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0), Eigen::Vector3
 
 PcMeshBuilder::PcMeshBuilder() {
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
+    sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
+    sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
     pub_pc_ = nh_.advertise<MyPointcloud>("meshPc", 10);
 
     // init
