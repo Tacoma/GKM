@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+  <node name="project" pkg="project" type="project">
+    <remap from="/euroc2/lsd_slam/graph" to="/lsd_slam/graph" />
+    <remap from="/euroc2/lsd_slam/keyframes" to="/lsd_slam/keyframes" />
+    <remap from="/euroc2/lsd_slam/liveframes" to="/lsd_slam/liveframes" />
+  </node>
+
+</launch>
