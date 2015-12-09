@@ -9,26 +9,13 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   eigen_conversions
-  message_generation
   visualization_msgs
 )
 
 #find_package(Eigen REQUIRED)
 find_package(sophus REQUIRED)
-find_package(message_generation)
 
-add_message_files(
-	FILES 
-	keyframeGraphMsg.msg
-	keyframeMsg.msg
-) 
-
-generate_messages(
-	DEPENDENCIES
-	std_msgs
-)
-
-catkin_package(CATKIN_DEPENDS message_runtime)
+catkin_package(CATKIN_DEPENDS)
 
 include_directories(
   include
