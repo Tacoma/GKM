@@ -13,18 +13,28 @@
 
 #include <iostream>
 
-const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0), Eigen::Vector3f(0,128,0), Eigen::Vector3f(0,0,128),
-                                        Eigen::Vector3f(128,128,0), Eigen::Vector3f(128,0,128), Eigen::Vector3f(0,128,128), Eigen::Vector3f(128,128,128)};
+const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0),
+                                        Eigen::Vector3f(0,128,0),
+                                        Eigen::Vector3f(0,0,128),
+                                        Eigen::Vector3f(128,128,0),
+                                        Eigen::Vector3f(128,0,128),
+                                        Eigen::Vector3f(0,128,128),
+                                        Eigen::Vector3f(128,128,128)};
 
 
-PcMeshBuilder::PcMeshBuilder() {
+PcMeshBuilder::PcMeshBuilder() :
+    showOnlyPlanarPointclouds_(true),
+    showOnlyCurrent_(false),
+    showOnlyColorCurrent_(true) {
+
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
     pub_pc_ = nh_.advertise<MyPointcloud>("meshPc", 10);
 
     // init
-    pointcloud_union_ = boost::make_shared<MyPointcloud>();
+    pointcloud_union_planar_ = boost::make_shared<MyPointcloud>();
+    pointcloud_union_non_planar_ = boost::make_shared<MyPointcloud>();
 
     std::cout << "PcMeshBuilder started..." << std::endl;
 }
@@ -33,8 +43,9 @@ PcMeshBuilder::~PcMeshBuilder() {
 }
 
 void PcMeshBuilder::reset() {
-    pointcloud_union_ = boost::make_shared<MyPointcloud>();
-    pointcloud_vector_.clear();
+    pointcloud_union_planar_ = boost::make_shared<MyPointcloud>();
+    pointcloud_union_non_planar_ = boost::make_shared<MyPointcloud>();
+    pointcloud_planar_vector_.clear();
 
     last_frame_id_ = 0;
 }
@@ -43,12 +54,15 @@ void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
     if (msg->isKeyframe) {
         MyPointcloud::Ptr cloud = processPointcloud(msg);
         cloud = findPlanes(cloud);
-        // add to vector and accumulated pointcloud
-        pointcloud_vector_.push_back(cloud);
-        *pointcloud_union_ += *cloud;
 
         if(cloud) {
+            // add to vector and accumulated pointcloud
+            pointcloud_planar_vector_.push_back(cloud);
             publishPointclouds();
+
+            if(showOnlyColorCurrent_ && pointcloud_planar_vector_.size() > 0) {
+                colorPointcloud(*pointcloud_planar_vector_[pointcloud_planar_vector_.size()-1], Eigen::Vector3f(128,128,128));
+            }
         }
     } else {
         // check for reset
@@ -209,8 +223,9 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, un
 
         i++;
     }
-    // add non planar point clouds to the union pointcloud with a white color
-    *union_cloud += *cloud_filtered;
+    // add pointcloud keyframe to the accumulated pointclouds depending on planar property
+    *pointcloud_union_planar_ += *union_cloud;
+    *pointcloud_union_non_planar_ += *cloud_filtered;
 
     return union_cloud;
 }
@@ -224,8 +239,26 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector
 }
 
 void PcMeshBuilder::publishPointclouds() {
+    MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
+
+    if(!showOnlyColorCurrent_) {
+        if(showOnlyCurrent_ && pointcloud_planar_vector_.size() > 0) {
+            *union_cloud += *pointcloud_planar_vector_[pointcloud_planar_vector_.size()-1];
+        } else {
+            *union_cloud += *pointcloud_union_planar_;
+        }
+    } else {
+        for(int i=0; i<pointcloud_planar_vector_.size(); i++) {
+            *union_cloud += *pointcloud_planar_vector_[i];
+        }
+    }
+
+    if(!showOnlyPlanarPointclouds_) {
+        *union_cloud += *pointcloud_union_non_planar_;
+    }
+
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*pointcloud_union_, *msg);
+    pcl::toROSMsg(*union_cloud, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = "world";
 

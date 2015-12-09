@@ -43,14 +43,19 @@ public:
 
     inline void colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector3f color);
 
+    bool showOnlyPlanarPointclouds_;
+    bool showOnlyCurrent_;
+    bool showOnlyColorCurrent_;
+
 private:
     ros::NodeHandle nh_;
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
 
-    std::vector<MyPointcloud::Ptr> pointcloud_vector_;
-    MyPointcloud::Ptr pointcloud_union_;
+    std::vector<MyPointcloud::Ptr> pointcloud_planar_vector_;
+    MyPointcloud::Ptr pointcloud_union_planar_;
+    MyPointcloud::Ptr pointcloud_union_non_planar_;
 
     unsigned int last_frame_id_;
 };
