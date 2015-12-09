@@ -3,7 +3,6 @@
 
 #include <ros/ros.h>
 #include <Eigen/Core>
-#include <project/keyframeMsg.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Pose.h>
 #include "sophus/sim3.hpp"
