@@ -10,18 +10,18 @@
 // pcl
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+// msgs
+#include <lsd_slam_msgs/keyframeMsg.h>
+#include <lsd_slam_msgs/keyframeGraphMsg.h>
 // tf
-#include <tf/transform_broadcaster.h>
+//#include <tf/transform_broadcaster.h>
+
+#include <vector>
 
 typedef unsigned char uchar;
 typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::PointCloud<MyPoint> MyPointCloud;
+typedef pcl::PointCloud<MyPoint> MyPointcloud;
 
-struct MyVertex
-{
-    float point[3];
-    uchar color[4];
-};
 struct InputPointDense
 {
     float idepth;
@@ -35,31 +35,24 @@ public:
     PcMeshBuilder();
     ~PcMeshBuilder();
 
-    void setFrom(project::keyframeMsgConstPtr msg);
-    void refreshPC();
-    void findPlanes(const MyPointCloud& cloud_in);
-    void initMarker();
-    void createNormal(geometry_msgs::Pose pose);
-    void createNormal(Eigen::Matrix3f rotation, Eigen::Vector3f translation);
-    inline void colorPC(MyPointCloud& cloud_in, Eigen::Vector3f color);
+    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, unsigned int num_planes=3);
+    void publishPointclouds();
+    void reset();
 
-    Sophus::Sim3f camToWorld_;
-    visualization_msgs::Marker marker_;
+    inline void colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector3f color);
 
 private:
     ros::NodeHandle nh_;
-    ros::Subscriber sub_pc_;    // lsd_slam/keyframes
+    ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
+    ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
-    ros::Publisher pub_marker_; // arrow markers used to visualize plane normals
 
-    float fx_,fy_,cx_,cy_;
-    float fxi_,fyi_,cxi_,cyi_;
-    int width_;
-    int height_;
-    unsigned int id_;
-    double time_;
+    std::vector<MyPointcloud::Ptr> pointcloud_vector_;
+    MyPointcloud::Ptr pointcloud_union_;
 
-    InputPointDense* originalInput_;
+    unsigned int last_frame_id_;
 };
 
 #endif // PC_MESH_BUILDER_H

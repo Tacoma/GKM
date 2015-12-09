@@ -5,7 +5,9 @@
   <description>The project package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
-  <maintainer email="philipp_mueller1991@yahoo.de">philipp mueller</maintainer>
+  <maintainer email="philipp_mueller1991@yahoo.de">Philipp Mueller</maintainer>
+  <maintainer email="bengrzimek@online.de">Benjamin Grzimek</maintainer>
+  <maintainer email="anshkapil@gmail.com">Ansh Kapil</maintainer>
 
   <!-- One license tag required, multiple allowed, one license per tag -->
   <!-- Commonly used license strings: -->
