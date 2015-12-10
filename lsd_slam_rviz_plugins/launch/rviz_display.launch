@@ -1,0 +1,5 @@
+<launch>
+  <group ns="rviz">      
+    <node pkg="rviz" name="rviz" type="rviz" launch-prefix="valgrind"/>
+  </group>
+</launch>

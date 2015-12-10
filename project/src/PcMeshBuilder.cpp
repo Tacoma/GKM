@@ -24,8 +24,8 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0),
 
 PcMeshBuilder::PcMeshBuilder() :
     showOnlyPlanarPointclouds_(true),
-    showOnlyCurrent_(false),
-    showOnlyColorCurrent_(true) {
+    showOnlyCurrent_(true),
+    showOnlyColorCurrent_(false) {
 
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);

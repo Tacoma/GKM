@@ -67,19 +67,19 @@ namespace rviz_cloud2_graph_display
 PointCloud2GraphDisplay::PointCloud2GraphDisplay() {
     pc_topic_property_ =
         new rviz::RosTopicProperty("Pointcloud Topic", "",
-                                   QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
+                                   QString::fromStdString("lsd_slam_msgs/keyframeMsg"),
                                    "lsd_slam/keyframe topic to subscribe to", this,
                                    SLOT(updateTopic()));
 
     oculus_cam_follow_topic_property_ =
         new rviz::RosTopicProperty("Follow camera topic", "",
-                                   QString::fromStdString("lsd_slam_viewer/keyframeMsg"),
+                                   QString::fromStdString("lsd_slam_msgs/keyframeMsg"),
                                    "lsd_slam/liveframes topic to in order to publish the camera position as tf-frame \"camera\".", this,
                                    SLOT(updateTopic()));
 
     graph_topic_property_ =
         new rviz::RosTopicProperty("Graph Topic", "",
-                                   QString::fromStdString("lsd_slam_viewer/keyframeGraphMsg"),
+                                   QString::fromStdString("lsd_slam_msgs/keyframeGraphMsg"),
                                    "lsd_slam/graph topic to subscribe to", this,
                                    SLOT(updateTopic()));
 }
