@@ -13,7 +13,7 @@
 #include <lsd_slam_msgs/keyframeMsg.h>
 #include <lsd_slam_msgs/keyframeGraphMsg.h>
 // tf
-//#include <tf/transform_broadcaster.h>
+#include <tf/transform_broadcaster.h>
 
 #include <vector>
 
@@ -35,8 +35,8 @@ public:
     ~PcMeshBuilder();
 
     void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-    MyPointcloud::Ptr processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, unsigned int num_planes=3);
+    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
+    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f pose, unsigned int num_planes=3);
     void publishPointclouds();
     void reset();
 
@@ -53,6 +53,7 @@ private:
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
 
     std::vector<MyPointcloud::Ptr> pointcloud_planar_vector_;
+    std::vector<Sophus::Sim3f> pointcloud_pose_vector_;
     MyPointcloud::Ptr pointcloud_union_planar_;
     MyPointcloud::Ptr pointcloud_union_non_planar_;
 

@@ -1,5 +1,3 @@
-#include "PcMeshBuilder.h"
-
 // pcl
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/transforms.h>
@@ -13,17 +11,21 @@
 
 #include <iostream>
 
+#include "PcMeshBuilder.h"
+#include "plane.hpp"
+
 const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0),
                                         Eigen::Vector3f(0,128,0),
                                         Eigen::Vector3f(0,0,128),
                                         Eigen::Vector3f(128,128,0),
                                         Eigen::Vector3f(128,0,128),
                                         Eigen::Vector3f(0,128,128),
-                                        Eigen::Vector3f(128,128,128)};
+                                        Eigen::Vector3f(128,128,128)
+                                      };
 
 
 PcMeshBuilder::PcMeshBuilder() :
-    showOnlyPlanarPointclouds_(true),
+    showOnlyPlanarPointclouds_(false),
     showOnlyCurrent_(true),
     showOnlyColorCurrent_(false) {
 
@@ -52,12 +54,15 @@ void PcMeshBuilder::reset() {
 
 void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
     if (msg->isKeyframe) {
-        MyPointcloud::Ptr cloud = processPointcloud(msg);
-        cloud = findPlanes(cloud);
+        MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
+        Sophus::Sim3f pose;
+        processPointcloud(msg, cloud, pose);
+        cloud = findPlanes(cloud, pose);
 
         if(cloud) {
             // add to vector and accumulated pointcloud
             pointcloud_planar_vector_.push_back(cloud);
+            // pointcloud_pose_vector_ already filled in processPointcloud
             publishPointclouds();
 
             if(showOnlyColorCurrent_ && pointcloud_planar_vector_.size() > 0) {
@@ -74,9 +79,10 @@ void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
     }
 }
 
-MyPointcloud::Ptr PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose) {
     Sophus::Sim3f camToWorld;
     memcpy(camToWorld.data(), msg->camToWorld.data(), 7*sizeof(float));
+    pointcloud_pose_vector_.push_back(camToWorld);
 
     float fx = msg->fx;
     float fy = msg->fy;
@@ -108,19 +114,42 @@ MyPointcloud::Ptr PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframe
 //        return boost::shared_ptr<MyPointcloud>(); // return nullptr;
     }
 
-    // TODO parameterize
-    const float scaledDepthVarTH = pow(10.0f,-3.0f);
-    const float absDepthVarTH = pow(10.0f, 1.0f);
-    const int minNearSupport = 7;
-    const int sparsifyFactor = 1;
+    // TODO parameterize scaledDepthVarTH, absDepthVarTH, minNearSupport, sparsifyFactor
+    // look at https://github.com/tum-vision/lsd_slam/tree/master/lsd_slam_viewer/src for reference of rqt_reconfigure
+    // parameters there should be called the same
+    float scaledDepthVarTH = pow(10.0f,-2.5f);
+    float absDepthVarTH = pow(10.0f, 1.0f);
+    int minNearSupport = 7;
+    int sparsifyFactor = 1;
+    Eigen::Vector2i min, max;
+    min.x() = width/2  - 50;
+    max.x() = width/2  + 50;
+    min.y() = height/2 - 100;
+    max.y() = height/2 + 0;
+    // Check values (clamp and swap)
+    // Offset of 1 for minNearSupport
+    min.x() = (min.x() < 1) ? 1 : min.x();
+    min.y() = (min.y() < 1) ? 1 : min.y();
+    max.x() = (max.x() > width-1) ? width-1 : max.x();
+    max.y() = (max.y() > width-1) ? width-1 : max.y();
+    if (min.x() > max.x()) {
+        int temp = min.x();
+        min.x() = max.x();
+        max.x() = temp;
+    }
+    if (min.y() > max.y()) {
+        int temp = min.y();
+        min.y() = max.y();
+        max.y() = temp;
+    }
+
 
     float worldScale = camToWorld.scale();
 
-    MyPointcloud::Ptr pc = boost::make_shared<MyPointcloud>();
-    pc->resize(width*height);
+    cloud->resize(width*height);
     int numPoints = 0;
-    for(int y=1; y<height-1; y++) {
-        for(int x=1; x<width-1; x++) {
+    for(int y=min.y(); y<max.y(); y++) {
+        for(int x=min.x(); x<max.x(); x++) {
             if(originalInput_[x+y*width].idepth <= 0)
                 continue;
 
@@ -161,21 +190,25 @@ MyPointcloud::Ptr PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframe
             point.r = originalInput_[x+y*width].color[2];
             point.g = originalInput_[x+y*width].color[1];
             point.b = originalInput_[x+y*width].color[0];
-            pc->points[numPoints] = point;
+            cloud->points[numPoints] = point;
 
             numPoints++;
         }
     }
     // refit pointcloud and search for planes
-    pc->resize(numPoints);
-    pcl::transformPointCloud(*pc,*pc,camToWorld.matrix());
+    cloud->resize(numPoints);
+    pcl::transformPointCloud(*cloud,*cloud,camToWorld.matrix());
 
     delete[] originalInput_;
-
-    return pc;
 }
 
-MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, unsigned int num_planes) {
+
+/**
+ * looks for num_planes planes in cloud_in and returns all points in theese planes,
+ * colored to the corresponding plane. Also sets the pointcloud_union_* clouds
+ *
+ */
+MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f pose, unsigned int num_planes) {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
     MyPointcloud::Ptr cropped_cloud = boost::make_shared<MyPointcloud>(*cloud_in);
@@ -221,7 +254,24 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, un
         extract.filter(*cloud_filtered);
         cropped_cloud.swap(cloud_filtered);
 
-        i++;
+        if ( i == 0 && false) { //WIP, ignore
+            // create plane from first ransac
+//             Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+//             // find intersection with camera principal axis
+//             Eigen::Vector3f camera = pose.translation();
+//             Eigen::Quaternionf rot = pose.quaternion();
+//             Eigen::Vector3f direction = Eigen::Vector3f(0,0,1);
+//             direction = rot * direction;
+//             Eigen::Vector3f intersection = plane.rayIntersection(camera, direction);
+// 	    
+// 	    static tf::TransformBroadcaster br;
+//             tf::Transform transform;
+//             transform.setOrigin( tf::Vector3(camera.x(), camera.y(), camera.z() ));
+//             transform.setRotation( tf::Quaternion(rot.x(), rot.y(), rot.z(), rot.w()));
+//             br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cam"));
+        }
+
+                                              i++;
     }
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
     *pointcloud_union_planar_ += *union_cloud;
@@ -241,15 +291,17 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector
 void PcMeshBuilder::publishPointclouds() {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
-    if(!showOnlyColorCurrent_) {
+
+    if (showOnlyColorCurrent_) {
+        for(int i=0; i<pointcloud_planar_vector_.size(); i++) {
+            *union_cloud += *pointcloud_planar_vector_[i];
+        }
+    }
+    else {
         if(showOnlyCurrent_ && pointcloud_planar_vector_.size() > 0) {
             *union_cloud += *pointcloud_planar_vector_[pointcloud_planar_vector_.size()-1];
         } else {
             *union_cloud += *pointcloud_union_planar_;
-        }
-    } else {
-        for(int i=0; i<pointcloud_planar_vector_.size(); i++) {
-            *union_cloud += *pointcloud_planar_vector_[i];
         }
     }
 
