@@ -11,12 +11,18 @@ find_package(catkin REQUIRED COMPONENTS
   eigen_conversions
   visualization_msgs
   lsd_slam_msgs
+  dynamic_reconfigure
 )
 
 #find_package(Eigen REQUIRED)
 find_package(sophus REQUIRED)
 
 catkin_package(CATKIN_DEPENDS)
+
+generate_dynamic_reconfigure_options(
+  cfg/config.cfg
+)
+
 
 include_directories(
   include
@@ -26,4 +32,7 @@ include_directories(
 
 add_executable(${PROJECT_NAME} src/PcMeshBuilder.cpp)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+add_dependencies(project ${PROJECT_NAME}_gencfg)
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
+
+
