@@ -14,14 +14,16 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure
 )
 
+generate_dynamic_reconfigure_options(
+  cfg/config.cfg
+)
+
 #find_package(Eigen REQUIRED)
 find_package(sophus REQUIRED)
 
 catkin_package(CATKIN_DEPENDS)
 
-generate_dynamic_reconfigure_options(
-  cfg/config.cfg
-)
+
 
 
 include_directories(
