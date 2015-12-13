@@ -17,6 +17,12 @@
 
 #include <vector>
 
+// Dynamic Reconfiguration
+
+#include "project/projectConfig.h"
+#include <dynamic_reconfigure/server.h>
+
+
 typedef unsigned char uchar;
 typedef pcl::PointXYZRGB MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointcloud;
@@ -46,6 +52,8 @@ public:
     bool showOnlyCurrent_;
     bool showOnlyColorCurrent_;
 
+    void configCallback(project::projectConfig &config, uint32_t level);
+
 private:
     ros::NodeHandle nh_;
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
@@ -58,6 +66,12 @@ private:
     MyPointcloud::Ptr pointcloud_union_non_planar_;
 
     unsigned int last_frame_id_;
+
+    // Parameters
+    float scaledDepthVarTH;
+    float absDepthVarTH;
+    int minNearSupport;
+    int sparsifyFactor;
 };
 
 #endif // PC_MESH_BUILDER_H

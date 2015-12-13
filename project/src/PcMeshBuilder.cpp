@@ -38,7 +38,23 @@ PcMeshBuilder::PcMeshBuilder() :
     pointcloud_union_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_union_non_planar_ = boost::make_shared<MyPointcloud>();
 
+    // Setting up Dynamic Reconfiguration
+
+/*	
+    scaledDepthVarTH = pow(10.0f,-2.5f);
+    absDepthVarTH = pow(10.0f, 1.0f);
+    minNearSupport = 7;
+    sparsifyFactor = 1;
+*/
+    dynamic_reconfigure::Server<project::projectConfig> server;
+    dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
+
+    f = boost::bind(&PcMeshBuilder::configCallback, this, _1, _2);
+    server.setCallback(f);
+
     std::cout << "PcMeshBuilder started..." << std::endl;
+
+
 }
 
 PcMeshBuilder::~PcMeshBuilder() {
@@ -317,10 +333,25 @@ void PcMeshBuilder::publishPointclouds() {
     pub_pc_.publish(msg);
 }
 
+void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {
+   
+    scaledDepthVarTH = pow(10.0f , config.scaledDepthVarTH );
+    absDepthVarTH = pow(10.0f, config.absDepthVarTH);
+    minNearSupport = config.minNearSupport;
+    sparsifyFactor = config.sparsifyFactor;
+
+    ROS_INFO("Reconfigure Request: scaledDepthVarTH: 10^ %f absDepthVarTH: 10^%f minNearSupport: %d sparsifyFactor: %d", 
+            config.scaledDepthVarTH, config.absDepthVarTH, config.minNearSupport, config.sparsifyFactor);
+}
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "project");
+
     PcMeshBuilder pcBuilder;
     ros::spin();
     return 0;
 }
+
+ 
+
+
