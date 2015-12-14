@@ -272,32 +272,40 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, co
             // Create plane from first ransac
              Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
             // Find intersection with camera principal axis
-            Eigen::Vector3f t = pose.translation();
-            Eigen::Quaternionf rot = pose.quaternion();
-//          ROS_INFO_STREAM("Translation: \n" << t.x() << ", " << t.y() << ", " << t.z() <<
-//                             "\nRotation: \n" << rot.x() << ", " << rot.y() << ", " << rot.z() << ", " << rot.w());
-            Eigen::Vector3f direction = Eigen::Vector3f(0,0,1);
-            direction = rot * direction;
-            Eigen::Vector3f intersection = plane.rayIntersection(t, direction);
+            Eigen::Vector3f cam_t = pose.translation();
+            Eigen::Quaternionf cam_rot = pose.quaternion();
+//          ROS_INFO_STREAM("Translation: \n" << cam_t.x() << ", " << cam_t.y() << ", " << cam_t.z() <<
+//                             "\nRotation: \n" << cam_rot.x() << ", " << cam_rot.y() << ", " << cam_rot.z() << ", " << cam_rot.w());
+//             Eigen::Vector3f direction = Eigen::Vector3f(0,0,1);
+//             direction = rot * direction;
+	    Eigen::Vector3f plane_point, plane_normal;
+	    plane.getNormalForm(plane_point, plane_normal);
+            Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
+	    Eigen::Quaternionf plane_rot = plane.getRotation();
 
 
             static tf::TransformBroadcaster br;
             tf::Transform transform;
 	    // Publish camera
-            transform.setOrigin( tf::Vector3(t.x(), t.y(), t.z() ));
-            transform.setRotation( tf::Quaternion(rot.x(), rot.y(), rot.z(), rot.w()));
+            transform.setOrigin( tf::Vector3(cam_t.x(), cam_t.y(), cam_t.z() ));
+            transform.setRotation( tf::Quaternion(cam_rot.x(), cam_rot.y(), cam_rot.z(), cam_rot.w()));
             br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cam"));
+	    tf::Transform CamToWorld = transform.inverse();
+	    
 	    // Publish ray plane intersection
-	    rot = plane.getRotation();
 	    transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
-            transform.setRotation( tf::Quaternion(rot.x(), rot.y(), rot.z(), rot.w()));
-	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "plane"));
-	    // Publish plane normal
-	    plane.getNormalForm(t, direction);
-	    rot = plane.getRotation();
-	    transform.setOrigin( tf::Vector3(direction.x(), direction.y(), direction.z() ));
-            transform.setRotation( tf::Quaternion(rot.x(), rot.y(), rot.z(), rot.w()));
-	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "normal"));
+            transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "intersection"));
+// 	    // Publish plane normal
+// 	    plane_normal = cam_t + plane_normal;
+// 	    transform.setOrigin( tf::Vector3(plane_normal.x(), plane_normal.y(), plane_normal.z() ));
+//             transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+// 	    transform = CamToWorld * transform;
+// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "cam", "normal"));
+// 	    // Publish plane point
+// 	    transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
+//             //transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "point"));
         }
 
         i++;
