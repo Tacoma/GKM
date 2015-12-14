@@ -42,7 +42,7 @@ public:
 
     void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
-    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f pose, unsigned int num_planes=3);
+    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
     void reset();
 
@@ -64,6 +64,7 @@ private:
     std::vector<Sophus::Sim3f> pointcloud_pose_vector_;
     MyPointcloud::Ptr pointcloud_union_planar_;
     MyPointcloud::Ptr pointcloud_union_non_planar_;
+    MyPointcloud::Ptr pointcloud_non_planar_;
 
     unsigned int last_frame_id_;
 
