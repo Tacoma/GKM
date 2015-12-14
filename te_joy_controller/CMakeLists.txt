@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   joy
   roscpp
   tf
+  eigen_conversions
 )
 
 ## System dependencies are found with CMake's conventions

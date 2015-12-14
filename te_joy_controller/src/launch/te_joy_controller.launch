@@ -1,19 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-	<arg name="mav_name" default="euroc2"/>
+  <arg name="mav_name" default="euroc2"/>
 
   <node name="joy_node" pkg="joy" type="joy_node">
   </node>
 
-	
-	<node name="te_joy_controller" pkg="te_joy_controller" type="controller_node">
-		<remap from="command/pose" to="$(arg mav_name)/command/pose" />
-		<remap from="vrpn_client/estimated_transform" to="$(arg mav_name)/vrpn_client/estimated_transform" />
-		<param name="speedUp" value="0.5" />
-		<param name="speedRight" value="0.6" />
-		<param name="speedForward" value="0.6" />
-		<param name="speedYawn" value="0.05" />
-	</node>
-
-  
+  <node name="te_joy_controller" pkg="te_joy_controller" type="controller_node">
+    <remap from="command/pose" to="$(arg mav_name)/command/pose" />
+    <remap from="vrpn_client/estimated_transform" to="$(arg mav_name)/vrpn_client/estimated_transform" />
+    <param name="speedUp" value="0.5" />
+    <param name="speedRight" value="0.6" />
+    <param name="speedForward" value="0.6" />
+    <param name="speedYawn" value="0.05" />
+  </node>
 </launch>

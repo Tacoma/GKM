@@ -2,6 +2,8 @@
 #define CONTROLLER_H_
 
 #include <ros/ros.h>
+#include <Eigen/Core>
+#include "sophus/sim3.hpp"
 #include <sensor_msgs/Joy.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
@@ -48,6 +50,8 @@
 #define PS3_AXIS_ACCELEROMETER_UP        18
 #define PS3_AXIS_GYRO_YAW                19
 
+static const Eigen::Vector3f forward = Eigen::Vector3f(1,0,0);
+
 class Controller
 {
 public:
@@ -59,6 +63,9 @@ public:
     void TakeoffAndHover();
 
 private:
+    void processPlaneMsg();
+    void testPlanes();
+
     ros::NodeHandle nh_;
 
     ros::Subscriber sub_joy_;
@@ -73,11 +80,15 @@ private:
     bool goal_reached_;
     tf::Transform transform_hover_goal_;
 
+    // move parallel to plane
+    bool stick_to_plane_;
+    float sticking_distance_;
+
     // Ros parameters
     float speedY_;      // speedRightLeft
     float speedX_;      // speedForwardBackward
     float speedZ_;      // speedUpDown
-    float speedYawn_;   // speedYawn
+    float speedYaw_;   // speedYawn
 };
 
 #endif // CONTROLLER_H_
