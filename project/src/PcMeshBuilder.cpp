@@ -25,7 +25,7 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(128,0,0),
 
 
 PcMeshBuilder::PcMeshBuilder() :
-    showOnlyPlanarPointclouds_(false),
+    showOnlyPlanarPointclouds_(true),
     showOnlyCurrent_(true),
     showOnlyColorCurrent_(false) {
 
@@ -38,8 +38,7 @@ PcMeshBuilder::PcMeshBuilder() :
     pointcloud_union_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_union_non_planar_ = boost::make_shared<MyPointcloud>();
 
-    // Setting up Dynamic Reconfiguration
-
+    // setting up Dynamic Reconfiguration
 /*	
     scaledDepthVarTH = pow(10.0f,-2.5f);
     absDepthVarTH = pow(10.0f, 1.0f);
@@ -53,8 +52,6 @@ PcMeshBuilder::PcMeshBuilder() :
     server.setCallback(f);
 
     std::cout << "PcMeshBuilder started..." << std::endl;
-
-
 }
 
 PcMeshBuilder::~PcMeshBuilder() {
@@ -133,10 +130,10 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     // TODO parameterize scaledDepthVarTH, absDepthVarTH, minNearSupport, sparsifyFactor
     // look at https://github.com/tum-vision/lsd_slam/tree/master/lsd_slam_viewer/src for reference of rqt_reconfigure
     // parameters there should be called the same
-    float scaledDepthVarTH = pow(10.0f,-2.5f);
-    float absDepthVarTH = pow(10.0f, 1.0f);
-    int minNearSupport = 7;
-    int sparsifyFactor = 1;
+//    float scaledDepthVarTH = pow(10.0f,-2.5f);
+//    float absDepthVarTH = pow(10.0f, 1.0f);
+//    int minNearSupport = 7;
+//    int sparsifyFactor = 1;
     Eigen::Vector2i min, max;
     min.x() = width/2  - 50;
     max.x() = width/2  + 50;
@@ -220,9 +217,8 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 
 
 /**
- * looks for num_planes planes in cloud_in and returns all points in theese planes,
+ * looks for num_planes planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane. Also sets the pointcloud_union_* clouds
- *
  */
 MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f pose, unsigned int num_planes) {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
@@ -307,7 +303,6 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector
 void PcMeshBuilder::publishPointclouds() {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
-
     if (showOnlyColorCurrent_) {
         for(int i=0; i<pointcloud_planar_vector_.size(); i++) {
             *union_cloud += *pointcloud_planar_vector_[i];
@@ -333,8 +328,7 @@ void PcMeshBuilder::publishPointclouds() {
     pub_pc_.publish(msg);
 }
 
-void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {
-   
+void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {   
     scaledDepthVarTH = pow(10.0f , config.scaledDepthVarTH );
     absDepthVarTH = pow(10.0f, config.absDepthVarTH);
     minNearSupport = config.minNearSupport;
@@ -346,7 +340,6 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "project");
-
     PcMeshBuilder pcBuilder;
     ros::spin();
     return 0;
