@@ -14,33 +14,50 @@ class Plane {
 public:
     Plane(float a, float b, float c, float d) : a_(a), b_(b), c_(c), d_(d) {
         Eigen::Vector3f p, n;
-        normalForm(p,n);
-        plane = EigenPlane(p,n);
+        getNormalForm(p,n);
+        plane = EigenPlane(n,p);
     }
 
-    Plane(Eigen::Vector4f coord) : a_(coord[0]), b_(coord[1]), c_(coord[2]), d_(coord[3]) {}
+    Plane(Eigen::Vector4f coord) : a_(coord[0]), b_(coord[1]), c_(coord[2]), d_(coord[3]) {
+	Eigen::Vector3f p, n;
+        getNormalForm(p,n);
+        plane = EigenPlane(n,p);
+    }
     ~Plane() {}
 
-    void normalForm(Eigen::Vector3f &p, Eigen::Vector3f n) {
+    void getNormalForm(Eigen::Vector3f &p, Eigen::Vector3f &n) {
         n = Eigen::Vector3f(a_, b_, c_);
-        if ( a_ > b_ ) {
-            if ( a_ > c_ ) {
-                p = Eigen::Vector3f(d_/a_,0,0);
-            } else {
-                p = Eigen::Vector3f(0,0,d_/c_);
-            }
-        } else if (b_ > c_) {
-            p = Eigen::Vector3f(0,d_/b_,0);
-        } else {
-            p = Eigen::Vector3f(0,0,d_/c_);
-        }
+	float length = n.norm();
+	n = n / length;
+//         // get middle parameter for the point (x = e1 to e3)
+//         float a = abs(a);
+//         float b = abs(b);
+//         float c = abs(c);
+//         if ( a > b && a < c ) {
+//             p = Eigen::Vector3f(d_/a_,0,0);
+//         } else if (b > c) {
+//             p = Eigen::Vector3f(0,0,d_/c_);
+//         } else {
+//             p = Eigen::Vector3f(0,d_/b_,0);
+//         }
+//         p = Eigen::Vector3f(d_/length,d_/length,d_/length);
+	if (a_ != 0.0f && b_ != 0.0f && c_ != 0.0f) {
+	    p = Eigen::Vector3f(-d_/(3*a_),-d_/(3*b_),-d_/(3*c_));
+	} else { p = Eigen::Vector3f(0,0,0); }
     }
     
+    Eigen::Quaternionf getRotation() {
+	Eigen::Vector3f p, n;
+	getNormalForm(p,n);
+	Eigen::Quaternionf rotation; 
+	return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), n);
+    }
+	
+    
     Eigen::Vector3f rayIntersection(Eigen::Vector3f p, Eigen::Vector3f d) {
-	d = d.normalized();
-	Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>::Through(p,p+d);
-	double t = pline.intersection( plane ) ;
-	Eigen::Vector3f intersection =  p + t*(d);
+	d.normalize();
+	Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(p,d);
+	Eigen::Vector3f intersection = pline.intersectionPoint( plane );
 	return intersection;
     }
 

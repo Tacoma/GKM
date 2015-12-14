@@ -37,19 +37,22 @@ PcMeshBuilder::PcMeshBuilder() :
     // init
     pointcloud_union_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_union_non_planar_ = boost::make_shared<MyPointcloud>();
+    pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
 
-    // setting up Dynamic Reconfiguration
-/*	
-    scaledDepthVarTH = pow(10.0f,-2.5f);
-    absDepthVarTH = pow(10.0f, 1.0f);
-    minNearSupport = 7;
-    sparsifyFactor = 1;
-*/
-    dynamic_reconfigure::Server<project::projectConfig> server;
+    // Setting up Dynamic Reconfiguration
+
+    /*
+        scaledDepthVarTH = pow(10.0f,-2.5f);
+        absDepthVarTH = pow(10.0f, 1.0f);
+        minNearSupport = 7;
+        sparsifyFactor = 1;
+    */
+
+    
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
 
     f = boost::bind(&PcMeshBuilder::configCallback, this, _1, _2);
-    server.setCallback(f);
+    server_.setCallback(f);
 
     std::cout << "PcMeshBuilder started..." << std::endl;
 }
@@ -70,7 +73,7 @@ void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
         MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
         Sophus::Sim3f pose;
         processPointcloud(msg, cloud, pose);
-        cloud = findPlanes(cloud, pose);
+        cloud = findPlanes(cloud, pose, 1);
 
         if(cloud) {
             // add to vector and accumulated pointcloud
@@ -93,9 +96,8 @@ void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 }
 
 void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose) {
-    Sophus::Sim3f camToWorld;
-    memcpy(camToWorld.data(), msg->camToWorld.data(), 7*sizeof(float));
-    pointcloud_pose_vector_.push_back(camToWorld);
+    memcpy(pose.data(), msg->camToWorld.data(), 7*sizeof(float));
+    pointcloud_pose_vector_.push_back(pose);
 
     float fx = msg->fx;
     float fy = msg->fy;
@@ -135,10 +137,10 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 //    int minNearSupport = 7;
 //    int sparsifyFactor = 1;
     Eigen::Vector2i min, max;
-    min.x() = width/2  - 50;
-    max.x() = width/2  + 50;
-    min.y() = height/2 - 100;
-    max.y() = height/2 + 0;
+    min.x() = width/2  - 90;
+    max.x() = width/2  + 90;
+    min.y() = 0;
+    max.y() = 100;
     // Check values (clamp and swap)
     // Offset of 1 for minNearSupport
     min.x() = (min.x() < 1) ? 1 : min.x();
@@ -157,7 +159,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     }
 
 
-    float worldScale = camToWorld.scale();
+    float worldScale = pose.scale();
 
     cloud->resize(width*height);
     int numPoints = 0;
@@ -210,7 +212,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     }
     // refit pointcloud and search for planes
     cloud->resize(numPoints);
-    pcl::transformPointCloud(*cloud,*cloud,camToWorld.matrix());
+    pcl::transformPointCloud(*cloud,*cloud,pose.matrix());
 
     delete[] originalInput_;
 }
@@ -220,7 +222,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
  * looks for num_planes planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane. Also sets the pointcloud_union_* clouds
  */
-MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f pose, unsigned int num_planes) {
+MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f &pose, unsigned int num_planes) {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
     MyPointcloud::Ptr cropped_cloud = boost::make_shared<MyPointcloud>(*cloud_in);
@@ -240,7 +242,7 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, co
 
     // extract the planar inliers from the input cloud
     pcl::ExtractIndices<MyPoint> extract;
-    for(int i=0; i<num_planes; i++) {
+    for(int i=0; i<num_planes && !cropped_cloud->empty(); i++) {
         // segment the largest planar component from the cropped cloud
         seg.setInputCloud(cropped_cloud);
         seg.segment(*inliers, *coefficients);
@@ -266,28 +268,52 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, co
         extract.filter(*cloud_filtered);
         cropped_cloud.swap(cloud_filtered);
 
-        if ( i == 0 && false) { //WIP, ignore
-            // create plane from first ransac
-//             Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
-//             // find intersection with camera principal axis
-//             Eigen::Vector3f camera = pose.translation();
-//             Eigen::Quaternionf rot = pose.quaternion();
+        if ( i == 0) {
+            // Create plane from first ransac
+             Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+            // Find intersection with camera principal axis
+            Eigen::Vector3f cam_t = pose.translation();
+            Eigen::Quaternionf cam_rot = pose.quaternion();
+//          ROS_INFO_STREAM("Translation: \n" << cam_t.x() << ", " << cam_t.y() << ", " << cam_t.z() <<
+//                             "\nRotation: \n" << cam_rot.x() << ", " << cam_rot.y() << ", " << cam_rot.z() << ", " << cam_rot.w());
 //             Eigen::Vector3f direction = Eigen::Vector3f(0,0,1);
 //             direction = rot * direction;
-//             Eigen::Vector3f intersection = plane.rayIntersection(camera, direction);
-// 	    
-// 	    static tf::TransformBroadcaster br;
-//             tf::Transform transform;
-//             transform.setOrigin( tf::Vector3(camera.x(), camera.y(), camera.z() ));
-//             transform.setRotation( tf::Quaternion(rot.x(), rot.y(), rot.z(), rot.w()));
-//             br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cam"));
+	    Eigen::Vector3f plane_point, plane_normal;
+	    plane.getNormalForm(plane_point, plane_normal);
+            Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
+	    Eigen::Quaternionf plane_rot = plane.getRotation();
+
+
+            static tf::TransformBroadcaster br;
+            tf::Transform transform;
+	    // Publish camera
+            transform.setOrigin( tf::Vector3(cam_t.x(), cam_t.y(), cam_t.z() ));
+            transform.setRotation( tf::Quaternion(cam_rot.x(), cam_rot.y(), cam_rot.z(), cam_rot.w()));
+            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cam"));
+	    tf::Transform CamToWorld = transform.inverse();
+	    
+	    // Publish ray plane intersection
+	    transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
+            transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "intersection"));
+// 	    // Publish plane normal
+// 	    plane_normal = cam_t + plane_normal;
+// 	    transform.setOrigin( tf::Vector3(plane_normal.x(), plane_normal.y(), plane_normal.z() ));
+//             transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+// 	    transform = CamToWorld * transform;
+// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "cam", "normal"));
+// 	    // Publish plane point
+// 	    transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
+//             //transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "point"));
         }
 
-                                              i++;
+        i++;
     }
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
     *pointcloud_union_planar_ += *union_cloud;
     *pointcloud_union_non_planar_ += *cloud_filtered;
+    *pointcloud_non_planar_ = *cloud_filtered;
 
     return union_cloud;
 }
@@ -317,7 +343,12 @@ void PcMeshBuilder::publishPointclouds() {
     }
 
     if(!showOnlyPlanarPointclouds_) {
-        *union_cloud += *pointcloud_union_non_planar_;
+        if(showOnlyCurrent_) {
+            *union_cloud += *pointcloud_non_planar_;
+        }
+        else {
+            *union_cloud += *pointcloud_union_non_planar_;
+        }
     }
 
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
@@ -328,14 +359,15 @@ void PcMeshBuilder::publishPointclouds() {
     pub_pc_.publish(msg);
 }
 
+
 void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {   
     scaledDepthVarTH = pow(10.0f , config.scaledDepthVarTH );
     absDepthVarTH = pow(10.0f, config.absDepthVarTH);
     minNearSupport = config.minNearSupport;
     sparsifyFactor = config.sparsifyFactor;
 
-    ROS_INFO("Reconfigure Request: scaledDepthVarTH: 10^ %f absDepthVarTH: 10^%f minNearSupport: %d sparsifyFactor: %d", 
-            config.scaledDepthVarTH, config.absDepthVarTH, config.minNearSupport, config.sparsifyFactor);
+    ROS_INFO("Reconfigure Request: scaledDepthVarTH: 10^ %f absDepthVarTH: 10^%f minNearSupport: %d sparsifyFactor: %d",
+             config.scaledDepthVarTH, config.absDepthVarTH, config.minNearSupport, config.sparsifyFactor);
 }
 
 int main(int argc, char** argv) {
@@ -345,6 +377,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 
- 
+
 
 
