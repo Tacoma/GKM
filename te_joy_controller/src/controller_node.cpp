@@ -135,7 +135,10 @@ void Controller::Callback(const sensor_msgs::Joy::ConstPtr& joy) {
     }
 
     if(stick_to_plane_) {
-        testPlanes();
+        Eigen::Vector3f proj_pos = testPlanes();
+        // world transform
+        tf_mocap_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
+        tf_mocap_.setRotation( tf_mocap_.getRotation() * transform_.getRotation() );
     } else {
         // world transform
         tf_mocap_ *= transform_;
@@ -192,7 +195,8 @@ void Controller::processPlaneMsg() {
 }
 
 // TODO rename
-void Controller::testPlanes() {
+// TBD maybe use tf instead of eigen for simplicity
+Eigen::Vector3f Controller::testPlanes() {
     // mav
     tf::Transform mav_tf = tf_mocap_ * transform_;
 
@@ -204,8 +208,10 @@ void Controller::testPlanes() {
                                                      mav_tf.getRotation().z(),
                                                      mav_tf.getRotation().w());
 
+    // rviz debug -->
     mav_tf.setOrigin( tf::Vector3(mav_pos.x(), mav_pos.y(), mav_pos.z()) );
     br_tf_.sendTransform( tf::StampedTransform(mav_tf, ros::Time::now(), "world", "mav") );
+    // <--
 
     // plane
     Eigen::Vector3f plane_pos = Eigen::Vector3f(2,0,0);
@@ -213,18 +219,18 @@ void Controller::testPlanes() {
     plane_q.setRPY(0,0,180.0f);
     Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.x(),plane_q.y(),plane_q.z(),plane_q.w());
 
+    // rviz debug -->
     tf::Transform plane_tf;
     plane_tf.setOrigin( tf::Vector3(plane_pos.x(), plane_pos.y(), plane_pos.z()) );
     plane_tf.setRotation(plane_q);
     br_tf_.sendTransform( tf::StampedTransform(plane_tf, ros::Time::now(), "world", "normal") );
+    // <--
 
     // calculations
     Eigen::Vector3f normal = plane_rot*forward;
-    Eigen::Vector3f proj_pos = mav_pos + (sticking_distance_ - normal.dot(mav_pos-plane_pos)) * normal;
+    Eigen::Vector3f proj_pos = mav_pos + (sticking_distance_-normal.dot(plane_pos-mav_pos))*normal;
 
-    // world transform
-    tf_mocap_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    tf_mocap_.setRotation( tf_mocap_.getRotation() * transform_.getRotation() );
+    return proj_pos;
 }
 
 

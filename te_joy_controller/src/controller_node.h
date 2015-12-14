@@ -64,7 +64,7 @@ public:
 
 private:
     void processPlaneMsg();
-    void testPlanes();
+    Eigen::Vector3f testPlanes();
 
     ros::NodeHandle nh_;
 
