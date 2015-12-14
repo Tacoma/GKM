@@ -1,2 +1,0 @@
-launch with
-roslaunch exercise_2_1_dvo exercise_2_1_dvo_nodel.launch
