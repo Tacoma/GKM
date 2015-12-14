@@ -73,6 +73,8 @@ private:
     float absDepthVarTH;
     int minNearSupport;
     int sparsifyFactor;
+    
+    dynamic_reconfigure::Server<project::projectConfig> server_;
 };
 
 #endif // PC_MESH_BUILDER_H

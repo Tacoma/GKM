@@ -48,11 +48,11 @@ PcMeshBuilder::PcMeshBuilder() :
         sparsifyFactor = 1;
     */
 
-    dynamic_reconfigure::Server<project::projectConfig> server;
+    
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
 
     f = boost::bind(&PcMeshBuilder::configCallback, this, _1, _2);
-    server.setCallback(f);
+    server_.setCallback(f);
 
     std::cout << "PcMeshBuilder started..." << std::endl;
 }
