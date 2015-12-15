@@ -41,14 +41,6 @@ PcMeshBuilder::PcMeshBuilder() :
 
     // Setting up Dynamic Reconfiguration
 
-    /*
-        scaledDepthVarTH = pow(10.0f,-2.5f);
-        absDepthVarTH = pow(10.0f, 1.0f);
-        minNearSupport = 7;
-        sparsifyFactor = 1;
-    */
-
-    
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
 
     f = boost::bind(&PcMeshBuilder::configCallback, this, _1, _2);
@@ -129,13 +121,6 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 //        return boost::shared_ptr<MyPointcloud>(); // return nullptr;
     }
 
-    // TODO parameterize scaledDepthVarTH, absDepthVarTH, minNearSupport, sparsifyFactor
-    // look at https://github.com/tum-vision/lsd_slam/tree/master/lsd_slam_viewer/src for reference of rqt_reconfigure
-    // parameters there should be called the same
-//    float scaledDepthVarTH = pow(10.0f,-2.5f);
-//    float absDepthVarTH = pow(10.0f, 1.0f);
-//    int minNearSupport = 7;
-//    int sparsifyFactor = 1;
     Eigen::Vector2i min, max;
     min.x() = width/2  - 90;
     max.x() = width/2  + 90;
@@ -168,20 +153,20 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
             if(originalInput_[x+y*width].idepth <= 0)
                 continue;
 
-            if(sparsifyFactor > 1 && rand()%sparsifyFactor != 0)
+            if(sparsifyFactor_ > 1 && rand()%sparsifyFactor_ != 0)
                 continue;
 
             float depth = 1 / originalInput_[x+y*width].idepth;
             float depth4 = depth*depth;
             depth4*= depth4;
 
-            if(originalInput_[x+y*width].idepth_var * depth4 > scaledDepthVarTH)
+            if(originalInput_[x+y*width].idepth_var * depth4 > scaledDepthVarTH_)
                 continue;
 
-            if(originalInput_[x+y*width].idepth_var * depth4 * worldScale*worldScale > absDepthVarTH)
+            if(originalInput_[x+y*width].idepth_var * depth4 * worldScale*worldScale > absDepthVarTH_)
                 continue;
 
-            if(minNearSupport > 1) {
+            if(minNearSupport_ > 1) {
                 int nearSupport = 0;
                 for(int dx=-1; dx<2; dx++) {
                     for(int dy=-1; dy<2; dy++) {
@@ -194,7 +179,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
                     }
                 }
 
-                if(nearSupport < minNearSupport)
+                if(nearSupport < minNearSupport_)
                     continue;
             }
 
@@ -238,7 +223,7 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, co
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
-    seg.setDistanceThreshold(0.01); // TODO parameterize
+    seg.setDistanceThreshold(distanceThreshold_);
 
     // extract the planar inliers from the input cloud
     pcl::ExtractIndices<MyPoint> extract;
@@ -270,42 +255,26 @@ MyPointcloud::Ptr PcMeshBuilder::findPlanes(const MyPointcloud::Ptr cloud_in, co
 
         if ( i == 0) {
             // Create plane from first ransac
-             Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
-            // Find intersection with camera principal axis
+            Plane plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+
+            // Find intersection closest to camera (along plane normal)
             Eigen::Vector3f cam_t = pose.translation();
-            Eigen::Quaternionf cam_rot = pose.quaternion();
-//          ROS_INFO_STREAM("Translation: \n" << cam_t.x() << ", " << cam_t.y() << ", " << cam_t.z() <<
-//                             "\nRotation: \n" << cam_rot.x() << ", " << cam_rot.y() << ", " << cam_rot.z() << ", " << cam_rot.w());
-//             Eigen::Vector3f direction = Eigen::Vector3f(0,0,1);
-//             direction = rot * direction;
-	    Eigen::Vector3f plane_point, plane_normal;
-	    plane.getNormalForm(plane_point, plane_normal);
+            Eigen::Vector3f plane_point, plane_normal;
+            plane.getNormalForm(plane_point, plane_normal);
             Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
-	    Eigen::Quaternionf plane_rot = plane.getRotation();
+            Eigen::Quaternionf plane_rot = plane.getRotation();
 
 
             static tf::TransformBroadcaster br;
             tf::Transform transform;
-	    // Publish camera
-            transform.setOrigin( tf::Vector3(cam_t.x(), cam_t.y(), cam_t.z() ));
-            transform.setRotation( tf::Quaternion(cam_rot.x(), cam_rot.y(), cam_rot.z(), cam_rot.w()));
-            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cam"));
-	    tf::Transform CamToWorld = transform.inverse();
-	    
-	    // Publish ray plane intersection
-	    transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
+            // Publish ray plane intersection
+            transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
             transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "intersection"));
-// 	    // Publish plane normal
-// 	    plane_normal = cam_t + plane_normal;
-// 	    transform.setOrigin( tf::Vector3(plane_normal.x(), plane_normal.y(), plane_normal.z() ));
-//             transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-// 	    transform = CamToWorld * transform;
-// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "cam", "normal"));
-// 	    // Publish plane point
-// 	    transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
-//             //transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-// 	    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "point"));
+            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "intersection"));
+            // Publish plane point
+            transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
+            //transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "point"));
         }
 
         i++;
@@ -360,14 +329,12 @@ void PcMeshBuilder::publishPointclouds() {
 }
 
 
-void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {   
-    scaledDepthVarTH = pow(10.0f , config.scaledDepthVarTH );
-    absDepthVarTH = pow(10.0f, config.absDepthVarTH);
-    minNearSupport = config.minNearSupport;
-    sparsifyFactor = config.sparsifyFactor;
-
-    ROS_INFO("Reconfigure Request: scaledDepthVarTH: 10^ %f absDepthVarTH: 10^%f minNearSupport: %d sparsifyFactor: %d",
-             config.scaledDepthVarTH, config.absDepthVarTH, config.minNearSupport, config.sparsifyFactor);
+void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {
+    scaledDepthVarTH_ = pow(10.0f , config.scaledDepthVarTH );
+    absDepthVarTH_ = pow(10.0f, config.absDepthVarTH);
+    minNearSupport_ = config.minNearSupport;
+    sparsifyFactor_ = config.sparsifyFactor;
+    distanceThreshold_ = config.distanceThreshold;
 }
 
 int main(int argc, char** argv) {

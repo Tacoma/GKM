@@ -69,10 +69,11 @@ private:
     unsigned int last_frame_id_;
 
     // Parameters
-    float scaledDepthVarTH;
-    float absDepthVarTH;
-    int minNearSupport;
-    int sparsifyFactor;
+    float scaledDepthVarTH_;
+    float absDepthVarTH_;
+    int minNearSupport_;
+    int sparsifyFactor_;
+    float distanceThreshold_;
     
     dynamic_reconfigure::Server<project::projectConfig> server_;
 };
