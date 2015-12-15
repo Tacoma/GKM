@@ -17,15 +17,16 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::Callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::TransformStamped>("euroc2/vrpn_client/estimated_transform", 10, &Controller::SetMocapPose, this);
+    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("euroc2/planes", 10, &Controller::ProcessPlaneMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("euroc2/command/pose", 1);
 
     // identity rotation matrix as quaternion
     tf::Quaternion q;
     q.setRPY(0,0,0);
 
-    // init tf_mocap
-    tf_mocap_.setOrigin( tf::Vector3(0,0,0) );
-    tf_mocap_.setRotation(q);
+    // init mocap_tf
+    mocap_tf_.setOrigin( tf::Vector3(0,0,0) );
+    mocap_tf_.setRotation(q);
 
     // init transform
     transform_.setOrigin( tf::Vector3(0,0,0) );
@@ -35,14 +36,18 @@ Controller::Controller() :
     // init hover transform
     transform_hover_goal_.setOrigin( tf::Vector3(0,0,1) );
     transform_hover_goal_.setRotation(q);
+
+    // init plane_tf
+    plane_tf_.setOrigin(tf::Vector3(0,0,0));
+    plane_tf_.setRotation(q);
 }
 
 void Controller::SetMocapPose(const geometry_msgs::TransformStamped::ConstPtr& msg) {
-    tf_mocap_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
-    tf_mocap_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+    mocap_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
+    mocap_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 
     if(!goal_reached_) {
-        tf::Vector3 diff = transform_hover_goal_.getOrigin() - tf_mocap_.getOrigin();
+        tf::Vector3 diff = transform_hover_goal_.getOrigin() - mocap_tf_.getOrigin();
         if(diff.length() < 0.6f) {
             goal_reached_ = true;
         } else {
@@ -56,7 +61,7 @@ void Controller::SetMocapPose(const geometry_msgs::TransformStamped::ConstPtr& m
     testPlanes();
 
     // world transform
-    tf::Transform curr_transform = tf_mocap_ * transform_;
+    tf::Transform curr_transform = mocap_tf_ * transform_;
 
     // convert tf into pose and publish the pose
     tf::Vector3 desired_pos = curr_transform.getOrigin();
@@ -137,15 +142,16 @@ void Controller::Callback(const sensor_msgs::Joy::ConstPtr& joy) {
     if(stick_to_plane_) {
         Eigen::Vector3f proj_pos = testPlanes();
         // world transform
-        // TODO
+        mocap_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
+        mocap_tf_.setRotation( mocap_tf_.getRotation() * transform_.getRotation() );
     } else {
         // world transform
-        tf_mocap_ *= transform_;
+        mocap_tf_ *= transform_;
     }
 
     // convert tf into pose and publish the pose
-    tf::Vector3 desired_pos = tf_mocap_.getOrigin();
-    tf::Quaternion desired_rot = tf_mocap_.getRotation();
+    tf::Vector3 desired_pos = mocap_tf_.getOrigin();
+    tf::Quaternion desired_rot = mocap_tf_.getRotation();
 
     geometry_msgs::PoseStamped pose;
     // set header
@@ -162,7 +168,7 @@ void Controller::Callback(const sensor_msgs::Joy::ConstPtr& joy) {
     pub_pose_.publish(pose);
 
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(tf_mocap_, ros::Time::now(), "world", "controller") );
+    br_tf_.sendTransform( tf::StampedTransform(mocap_tf_, ros::Time::now(), "world", "controller") );
 }
 
 void Controller::TakeoffAndHover() {
@@ -189,16 +195,18 @@ void Controller::TakeoffAndHover() {
     }
 }
 
-void Controller::processPlaneMsg() {
-    // TODO set active plane
+void Controller::ProcessPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
+    plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
+    plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 }
 
 // TODO rename
 // TBD maybe use tf instead of eigen for simplicity
 Eigen::Vector3f Controller::testPlanes() {
     // mav
-    tf::Transform mav_tf = tf_mocap_ * transform_;
+    tf::Transform mav_tf = mocap_tf_ * transform_;
 
+    // Eigen conversions
     Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
                                                mav_tf.getOrigin().y(),
                                                mav_tf.getOrigin().z());
@@ -207,10 +215,8 @@ Eigen::Vector3f Controller::testPlanes() {
                                                      mav_tf.getRotation().z(),
                                                      mav_tf.getRotation().w());
 
-    // rviz debug -->
-    mav_tf.setOrigin( tf::Vector3(mav_pos.x(), mav_pos.y(), mav_pos.z()) );
+    // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(mav_tf, ros::Time::now(), "world", "mav") );
-    // <--
 
     // plane
     Eigen::Vector3f plane_pos = Eigen::Vector3f(2,0,0);
@@ -218,21 +224,16 @@ Eigen::Vector3f Controller::testPlanes() {
     plane_q.setRPY(M_PI/18.0f,0,M_PI/180.0f);
     Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.w(),plane_q.x(),plane_q.y(),plane_q.z());
 
-    // rviz debug -->
+    // rviz debug
     tf::Transform plane_tf;
     plane_tf.setOrigin( tf::Vector3(plane_pos.x(), plane_pos.y(), plane_pos.z()) );
     plane_tf.setRotation(plane_q);
     br_tf_.sendTransform( tf::StampedTransform(plane_tf, ros::Time::now(), "world", "normal") );
-    // <--
 
     // calculations
     Eigen::Vector3f normal = plane_rot*forward;
     normal.normalize();
     Eigen::Vector3f proj_pos = mav_pos + (sticking_distance_-normal.dot(mav_pos-plane_pos))*normal;
-
-    // tmp here
-    tf_mocap_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    tf_mocap_.setRotation( tf_mocap_.getRotation() * transform_.getRotation() );
 
     return proj_pos;
 }

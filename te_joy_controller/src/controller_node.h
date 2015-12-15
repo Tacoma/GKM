@@ -63,26 +63,29 @@ public:
     void TakeoffAndHover();
 
 private:
-    void processPlaneMsg();
+    void ProcessPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
     Eigen::Vector3f testPlanes();
 
     ros::NodeHandle nh_;
 
+    // ros subscriber, publisher and broadcaster
     ros::Subscriber sub_joy_;
     ros::Subscriber sub_mocap_pose_;
+    ros::Subscriber sub_plane_tf_;
     ros::Publisher pub_pose_;
     tf::TransformBroadcaster br_tf_;
 
     sensor_msgs::Joy::ConstPtr prev_msg_;
-    tf::StampedTransform tf_mocap_;
+    tf::StampedTransform mocap_tf_;
     tf::Transform transform_;
 
     bool goal_reached_;
     tf::Transform transform_hover_goal_;
 
-    // move parallel to plane
+    // TODO bool isPlaneActive;
     bool stick_to_plane_;
     float sticking_distance_;
+    tf::Transform plane_tf_;
 
     // Ros parameters
     float speedY_;      // speedRightLeft
