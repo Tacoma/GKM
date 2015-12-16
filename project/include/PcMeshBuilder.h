@@ -3,29 +3,22 @@
 
 #include <ros/ros.h>
 #include <Eigen/Core>
-#include <visualization_msgs/Marker.h>
-#include <geometry_msgs/Pose.h>
-#include "sophus/sim3.hpp"
+#include <vector>
 // pcl
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 // msgs
 #include <lsd_slam_msgs/keyframeMsg.h>
 #include <lsd_slam_msgs/keyframeGraphMsg.h>
-// tf
 #include <tf/transform_broadcaster.h>
-
-#include <vector>
-
+#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/Pose.h>
 // Dynamic Reconfiguration
-
 #include "project/projectConfig.h"
 #include <dynamic_reconfigure/server.h>
-
-
-typedef unsigned char uchar;
-typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::PointCloud<MyPoint> MyPointcloud;
+//
+#include "sophus/sim3.hpp"
+#include "plane.hpp"
 
 struct InputPointDense
 {
@@ -42,15 +35,14 @@ public:
 
     void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
-    MyPointcloud::Ptr findPlanes(const MyPointcloud::Ptr cloud_in, const Sophus::Sim3f &pose, unsigned int num_planes=3);
+    void removeKnownPlanes(const MyPointcloud::Ptr cloud);
+    void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
     void reset();
 
-    inline void colorPointcloud(MyPointcloud& cloud_in, Eigen::Vector3f color);
-
-    bool showOnlyPlanarPointclouds_;
-    bool showOnlyCurrent_;
-    bool showOnlyColorCurrent_;
+    inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
+    inline void getProcessWindow(Eigen::Vector2i &min, Eigen::Vector2i &max, int width, int height);
+    inline int clamp(int x, int min, int max);
 
     void configCallback(project::projectConfig &config, uint32_t level);
 
@@ -60,13 +52,14 @@ private:
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
 
-    std::vector<MyPointcloud::Ptr> pointcloud_planar_vector_;
-    std::vector<Sophus::Sim3f> pointcloud_pose_vector_;
-    MyPointcloud::Ptr pointcloud_union_planar_;
-    MyPointcloud::Ptr pointcloud_union_non_planar_;
+    MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
+    
+    std::vector<Plane::Ptr> planes_;
+    
 
     unsigned int last_frame_id_;
+    lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
 
     // Parameters
     float scaledDepthVarTH_;
@@ -74,6 +67,8 @@ private:
     int minNearSupport_;
     int sparsifyFactor_;
     float distanceThreshold_;
+    int windowSize_;
+    int windowPosY_;
     
     dynamic_reconfigure::Server<project::projectConfig> server_;
 };

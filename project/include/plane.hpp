@@ -3,27 +3,52 @@
 
 
 #include <Eigen/Core>
-//#include <boost/concept_check.hpp>
+#include <boost/shared_ptr.hpp>
 #include "sophus/sim3.hpp"
+#include "PcMeshBuilder.h"
 
 typedef Eigen::Hyperplane<float, 3> EigenPlane;
+
+typedef pcl::PointXYZRGB MyPoint;
+
+class MyPointcloud : public pcl::PointCloud<MyPoint>
+{
+public:
+    typedef boost::shared_ptr<MyPointcloud> Ptr;
+    int id;
+};
+
+typedef unsigned char uchar;
+//typedef pcl::PointCloud<MyPoint> MyPointcloud;
 
 
 
 class Plane {
 
 public:
+    typedef boost::shared_ptr<Plane> Ptr;
+
     Plane(float a, float b, float c, float d) : a_(a), b_(b), c_(c), d_(d) {
-        calculateNormalForm(point_,normal_);
-        plane = EigenPlane(normal_,point_);
+        init();
     }
 
-    Plane(Eigen::Vector4f coord) : a_(coord[0]), b_(coord[1]), c_(coord[2]), d_(coord[3]) {
-        calculateNormalForm(point_, normal_);
-        plane = EigenPlane(normal_, point_);
+    Plane(std::vector<float> coefficients) {
+        if (coefficients.size() != 4) {
+            ROS_ERROR("Plane with wrong number of coefficients created");
+        }
+        a_ = coefficients[0];
+        b_ = coefficients[1];
+        c_ = coefficients[2];
+        d_ = coefficients[3];
+        init();
     }
     ~Plane() {}
 
+    void init() {
+        calculateNormalForm(point_, normal_);
+        plane = EigenPlane(normal_, point_);
+        pointcloud_ = boost::make_shared<MyPointcloud>();
+    }
 
     Eigen::Quaternionf getRotation() {
         Eigen::Quaternionf rotation;
@@ -43,6 +68,31 @@ public:
         return intersection;
     }
 
+    void addPc(MyPointcloud::Ptr cloud) {
+        *pointcloud_ += *cloud;
+    }
+
+    float getA() {
+        return a_;
+    }
+    float getB() {
+        return b_;
+    }
+    float getC() {
+        return c_;
+    }
+    float getD() {
+        return d_;
+    }
+
+    void setPlane(std::vector<float> coefficients) {
+        a_ = coefficients[0];
+        b_ = coefficients[1];
+        c_ = coefficients[2];
+        d_ = coefficients[3];
+        init();
+    }
+
 
 private:
 
@@ -50,24 +100,13 @@ private:
         normal = Eigen::Vector3f(a_, b_, c_);
         float length = normal.norm();
         normal = normal / length;
-//         // get middle parameter for the point (x = e1 to e3)
-//         float a = abs(a);
-//         float b = abs(b);
-//         float c = abs(c);
-//         if ( a > b && a < c ) {
-//             p = Eigen::Vector3f(-d_/a_,0,0);
-//         } else if (b > c) {
-//             p = Eigen::Vector3f(0,0,-d_/c_);
-//         } else {
-//             p = Eigen::Vector3f(0,-d_/b_,0);
-//         }
-//         p = Eigen::Vector3f(d_/length,d_/length,d_/length);
-        if (a_ != 0.0f && b_ != 0.0f && c_ != 0.0f) {
-	    point = -d_/length*normal;
-            //point = Eigen::Vector3f(-d_/(3*a_),-d_/(3*b_),-d_/(3*c_));
-        } else {
-            point = Eigen::Vector3f(0,0,0);
-        }
+        point = -d_/length*normal;
+
+        //if (a_ != 0.0f && b_ != 0.0f && c_ != 0.0f) {
+        //    //point = Eigen::Vector3f(-d_/(3*a_),-d_/(3*b_),-d_/(3*c_));
+        //} else {
+        //    point = Eigen::Vector3f(0,0,0);
+        //}
     }
 
 
@@ -78,6 +117,8 @@ private:
     Eigen::Vector3f point_, normal_;
     // Eigen
     EigenPlane plane;
+    // Points
+    MyPointcloud::Ptr pointcloud_;
 
 
 
