@@ -80,12 +80,14 @@ private:
     tf::Transform transform_;
 
     bool goal_reached_;
-    tf::Transform transform_hover_goal_;
+    tf::Transform hover_goal_tf_;
 
     // TODO bool isPlaneActive;
     bool stick_to_plane_;
     float sticking_distance_;
+    float correction_speed_;
     tf::Transform plane_tf_;
+    tf::Transform snap_goal_tf_;
 
     // Ros parameters
     float speedY_;      // speedRightLeft
