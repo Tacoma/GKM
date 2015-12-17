@@ -35,7 +35,7 @@ public:
 
     void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
-    void removeKnownPlanes(const MyPointcloud::Ptr cloud);
+    void removeKnownPlanes(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
     void reset();
@@ -51,6 +51,7 @@ private:
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
+    dynamic_reconfigure::Server<project::projectConfig> server_;
 
     MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
@@ -70,7 +71,12 @@ private:
     int windowSize_;
     int windowPosY_;
     
-    dynamic_reconfigure::Server<project::projectConfig> server_;
+    int minPointsForEstimation_;
+    float noisePercentage_;
+    int maxPlanesPerCloud_;
+    
+    
+    int nextColor_;
 };
 
 #endif // PC_MESH_BUILDER_H
