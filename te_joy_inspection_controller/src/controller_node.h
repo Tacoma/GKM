@@ -58,13 +58,13 @@ public:
     Controller();
     ~Controller() {}
 
-    void Callback(const sensor_msgs::Joy::ConstPtr& joy);
-    void SetMocapPose(const geometry_msgs::TransformStamped::ConstPtr& msg);
-    void TakeoffAndHover();
+    void callback(const sensor_msgs::Joy::ConstPtr& joy);
+    void setMocapPose(const geometry_msgs::TransformStamped::ConstPtr& msg);
+    void takeoffAndHover();
 
 private:
-    void ProcessPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
-    Eigen::Vector3f testPlanes();
+    void processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
+    bool testPlanes();
 
     ros::NodeHandle nh_;
 
@@ -76,7 +76,7 @@ private:
     tf::TransformBroadcaster br_tf_;
 
     sensor_msgs::Joy::ConstPtr prev_msg_;
-    tf::StampedTransform mocap_tf_;
+    tf::Transform mocap_tf_;
     tf::Transform transform_;
 
     bool goal_reached_;
