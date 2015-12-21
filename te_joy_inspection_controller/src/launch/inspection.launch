@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="mav_name" value="euroc_hex"/>
+  <arg name="world_name" default="tum_kitchen"/>
+  <arg name="loc" default="slam" /> <!-- okvis, rovio, slam, vicon -->
+
+  <include file="$(find te_simulator_resources)/launch/world.launch">
+    <!-- tum_kitchen, powerplant, artificial -->
+    <arg name="world" value="$(find te_simulator_resources)/worlds/$(arg world_name).world"/>
+    <arg name="mav_name" value="$(arg mav_name)"/>
+  </include>
+
+  <node name="joy" pkg="joy" type="joy_node" output="screen" />
+
+  <group ns="$(arg mav_name)">
+    <node name="PD_attitude_controller" pkg="mav_linear_mpc" type="PD_attitude_controller_node" respawn="true"
+          clear_params="true" output="screen">
+      <remap from="odometry" to="msf_core/odometry"/>
+      <rosparam file="$(find mav_linear_mpc)/parameters/PD_attitude.yaml"/>
+      <param name="capability_group" value="Core"/>
+    </node>
+
+    <include file="$(find te_navigation)/launch/algorithms/$(arg loc).launch">
+      <arg name="mav_name" value="$(arg mav_name)"/>
+    </include>
+    <node pkg="rosservice" type="rosservice" name="initialize"
+      args="call --wait /gazebo/unpause_physics" />
+  </group>
+  
+  <!-- joy controller -->
+  <node name="te_joy_inspection_controller" pkg="te_joy_inspection_controller" type="controller_node">
+	<remap from="planes" to="$(arg mav_name)/planes" />
+	<remap from="command/pose" to="$(arg mav_name)/command/pose" />
+	<remap from="vrpn_client/estimated_transform" to="$(arg mav_name)/ground_truth/transform" />
+	<param name="speedUp" value="0.5" />
+	<param name="speedRight" value="0.6" />
+	<param name="speedForward" value="0.6" />
+	<param name="speedYaw" value="0.05" />
+  </node>
+  
+</launch>
