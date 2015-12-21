@@ -7,6 +7,7 @@
 #include <sensor_msgs/Joy.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 // buttons are either 0 or 1
 #define PS3_BUTTON_SELECT            0
@@ -59,7 +60,7 @@ public:
     ~Controller() {}
 
     void callback(const sensor_msgs::Joy::ConstPtr& joy);
-    void setMocapPose(const geometry_msgs::TransformStamped::ConstPtr& msg);
+    void setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg);
     void takeoffAndHover();
 
 private:

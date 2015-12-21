@@ -16,7 +16,7 @@ Controller::Controller() :
 
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
-    sub_mocap_pose_ = nh_.subscribe<geometry_msgs::TransformStamped>("vrpn_client/estimated_transform", 10, &Controller::setMocapPose, this);
+    sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("vrpn_client/estimated_transform", 10, &Controller::setMocapPose, this);
     sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("planes", 10, &Controller::processPlaneMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
 
@@ -46,19 +46,17 @@ Controller::Controller() :
     snap_goal_tf_.setRotation(q);
 }
 
-void Controller::setMocapPose(const geometry_msgs::TransformStamped::ConstPtr& msg) {
-    mocap_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
-    mocap_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+    mocap_tf_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
+    mocap_tf_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
     if(!goal_reached_) {
-        tf::Vector3 diff = hover_goal_tf_.getOrigin() - mocap_tf_.getOrigin();
-        if(diff.length() < 0.6f) {
+        tf::Transform diff = mocap_tf_.inverse() * hover_goal_tf_;
+        if(diff.getOrigin().length() < 0.05f) {
             goal_reached_ = true;
-        } else {
-            if(diff.length() > 1.0f) {
-                diff.normalize();
-            }
-            transform_.setOrigin(diff);
+        }
+        else {
+            transform_ = diff;
         }
     }
 
@@ -88,29 +86,6 @@ void Controller::setMocapPose(const geometry_msgs::TransformStamped::ConstPtr& m
     // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(curr_transform, ros::Time::now(), "world", "controller") );
 }
-
-//void Controller::Callback(const sensor_msgs::Joy::ConstPtr& joy) {
-//    prev_msg_ = joy;
-
-//    // translation from controller axis
-//    float jx = speedX_ * joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS];
-//    float jy = speedY_ * joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS];
-//    float jz = speedZ_ * joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS];
-//    // yaw from axis
-//    float jr = speedYaw_ * joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS];
-
-//    // save only the latest relative transform in global transform
-//    transform_.setOrigin( tf::Vector3(jx,jy,jz) );
-//    tf::Quaternion q;
-//    q.setRPY(0, 0, jr);
-//    transform_.setRotation(q);
-
-//    // listen for take off button pressed
-//    if(joy->buttons[PS3_BUTTON_PAIRING] || joy->buttons[PS3_BUTTON_START]) {
-//        goal_reached_ = false;
-//        TakeoffAndHover();
-//    }
-//}
 
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     prev_msg_ = joy;
@@ -181,25 +156,13 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
 void Controller::takeoffAndHover() {
     std_srvs::Empty::Request request;
     std_srvs::Empty::Response response;
-    if(ros::service::call("euroc2/takeoff", request, response)) {
-        tf::Vector3 desired_pos = hover_goal_tf_.getOrigin();
-        tf::Quaternion desired_rot = hover_goal_tf_.getRotation();
+    ros::service::call("euroc2/takeoff", request, response);
 
-        geometry_msgs::PoseStamped pose;
-        // set header
-        pose.header.stamp = ros::Time::now();
-        pose.header.frame_id = "world";
-        // set pose
-        pose.pose.position.x = desired_pos.x();
-        pose.pose.position.y = desired_pos.y();
-        pose.pose.position.z = desired_pos.z();
-        pose.pose.orientation.x = desired_rot.x();
-        pose.pose.orientation.y = desired_rot.y();
-        pose.pose.orientation.z = desired_rot.z();
-        pose.pose.orientation.w = desired_rot.w();
+    tf::Vector3 desired_pos = tf::Vector3( mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), 1.0f);
+    tf::Quaternion desired_rot = mocap_tf_.getRotation();
 
-        pub_pose_.publish(pose);
-    }
+    hover_goal_tf_.setOrigin(desired_pos);
+    hover_goal_tf_.setRotation(desired_rot);
 }
 
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
@@ -232,7 +195,7 @@ bool Controller::testPlanes() {
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), mocap_tf_.getOrigin().z());
 
     // if we are further away than sticking distance we don't want to snap and return false
-    if(abs(normal.dot(mav_pos-plane_pos)) >= sticking_distance_) {
+    if(fabs(normal.dot(mav_pos-plane_pos)) >= sticking_distance_) {
         return false;
     }
 
