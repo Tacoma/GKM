@@ -35,14 +35,14 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
 
 
 PcMeshBuilder::PcMeshBuilder()
-    {
+{
 
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
-    pub_markers_ = nh_.advertise< geometry_msgs::PolygonStamped>("Hull", 10);
-    
+    pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
+
     // init
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
@@ -81,6 +81,7 @@ void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
         findPlanes(cloud, pose, maxPlanesPerCloud_);
         // add to vector and accumulated pointcloud
         publishPointclouds();
+	publishPolygons();
     } else {
         // check for reset
         if (last_frame_id_ > msg->id) {
@@ -198,19 +199,19 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
     for ( int i=0; i < planes_.size() ; i++) {
         Plane::Ptr plane = planes_[i];
 
-	std::vector< int > temp;
-	model->setIndices(temp); // Assures that indices are reset so setInputCloud() will create new ones
+        std::vector< int > temp;
+        model->setIndices(temp); // Assures that indices are reset so setInputCloud() will create new ones
         model->setInputCloud(cloud);
         coefficients = plane->getCoefficients();
 
         model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
-	
-	// Refit the plane with new points only, if enought points were found. /TODO all points
-	if(inliers->size() >= minPointsForEstimation_) {
-	    model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
-	    plane->setPlane(coefficients_refined);
-	    model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
-	}
+
+        // Refit the plane with new points only, if enough points were found. /TODO all points
+        if(inliers->size() >= minPointsForEstimation_) {
+            model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
+            plane->setPlane(coefficients_refined);
+            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
+        }
 
         // Extract the inliers
         extract.setInputCloud(cloud);
@@ -219,8 +220,8 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
         extract.filter(*cloud_filtered);
 
         colorPointcloud(cloud_filtered, plane->color_);
-        *(plane->pointcloud_) += *cloud_filtered;
-	*pointcloud_debug_ += *cloud_filtered;
+        plane->addPointcoud(cloud_filtered);
+        *pointcloud_debug_ += *cloud_filtered;
 
         extract.setNegative(true);
         extract.filter(*cloud_filtered);
@@ -253,10 +254,6 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
     seg.setDistanceThreshold(distanceThreshold_);
-    
-    jsk_recognition_msgs::PolygonArray markers;
-    markers.header.frame_id = "world";
-    markers.header.stamp = ros::Time::now();
 
     // extract the planar inliers from the input cloud
     for(int i=0; i<num_planes && cloud_cropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
@@ -290,23 +287,10 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
         plane->addPointcoud(cloud_plane);
         plane->color_ = color;
         planes_.push_back(plane);
-	
-	if (true) {
-	    MyPointcloud::ConstPtr hull = plane->getHull();
-	    geometry_msgs::PolygonStamped polyStamped;
-	    // fill poly
-	    polyStamped.header.stamp = ros::Time::now();
-	    polyStamped.header.frame_id = "world";
-	    for (int i=0; i < hull->size(); i++) {
-		geometry_msgs::Point32 point;
-		point.x = hull->points[i].x;
-		point.y = hull->points[i].y;
-		point.z = hull->points[i].z;
-		polyStamped.polygon.points.push_back(point);
-	    }
-	    //markers.polygons.push_back(polyStamped);
-	    pub_markers_.publish(polyStamped);
-	}
+
+        if (true) {
+
+        }
 
         // Debugging
         if ( false ) {
@@ -332,8 +316,7 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
 
         i++;
     }
-    pub_markers_.publish(markers);
-    
+
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
     *pointcloud_planar_ = *cloud_union_planar;
     *pointcloud_non_planar_ = *cloud_cropped;
@@ -383,6 +366,29 @@ void PcMeshBuilder::publishPointclouds() {
     msg->header.frame_id = "world";
 
     pub_pc_.publish(msg);
+}
+
+void PcMeshBuilder::publishPolygons() {
+    jsk_recognition_msgs::PolygonArray markers;
+    markers.header.frame_id = "world";
+    markers.header.stamp = ros::Time::now();
+
+    geometry_msgs::PolygonStamped polyStamped;
+    polyStamped.header.stamp = ros::Time::now();
+    polyStamped.header.frame_id = "world";
+
+    for (int i=0; i<planes_.size(); i++) {
+        MyPointcloud::ConstPtr hull = planes_[i]->getHull();
+        for (int i=0; i < hull->size(); i++) {
+            geometry_msgs::Point32 point;
+            point.x = hull->points[i].x;
+            point.y = hull->points[i].y;
+            point.z = hull->points[i].z;
+            polyStamped.polygon.points.push_back(point);
+        }
+        markers.polygons.push_back(polyStamped);
+    }
+    pub_markers_.publish(markers);
 }
 
 

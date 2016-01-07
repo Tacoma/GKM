@@ -38,6 +38,7 @@ public:
     void removeKnownPlanes(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
+    void publishPolygons();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
