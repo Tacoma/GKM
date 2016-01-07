@@ -29,6 +29,7 @@ public:
     typedef boost::shared_ptr<Plane> Ptr;
 
     Plane(float a, float b, float c, float d) : a_(a), b_(b), c_(c), d_(d) {
+	pointcloud_ = boost::make_shared<MyPointcloud>();
         init();
     }
 
@@ -36,6 +37,7 @@ public:
         if (coefficients.size() != 4) {
             ROS_ERROR("Plane with wrong number of coefficients created");
         }
+        pointcloud_ = boost::make_shared<MyPointcloud>();
         a_ = coefficients[0];
         b_ = coefficients[1];
         c_ = coefficients[2];
@@ -47,7 +49,6 @@ public:
     void init() {
         calculateNormalForm(point_, normal_);
         plane = EigenPlane(normal_, point_);
-        pointcloud_ = boost::make_shared<MyPointcloud>();
     }
 
     Eigen::Quaternionf getRotation() {
@@ -68,10 +69,6 @@ public:
         return intersection;
     }
 
-    void addPc(MyPointcloud::Ptr cloud) {
-        *pointcloud_ += *cloud;
-    }
-
     float getA() {
         return a_;
     }
@@ -84,12 +81,18 @@ public:
     float getD() {
         return d_;
     }
+    Eigen::VectorXf getCoefficients() {
+        Eigen::VectorXf coeff(4);
+        coeff << a_ , b_ , c_ , d_;
+        return coeff;
+    }
 
-    void setPlane(std::vector<float> coefficients) {
-        a_ = coefficients[0];
-        b_ = coefficients[1];
-        c_ = coefficients[2];
-        d_ = coefficients[3];
+    void setPlane(const Eigen::VectorXf coefficients) {
+	if (coefficients.size() != 4) { return; }
+        a_ = coefficients(0);
+        b_ = coefficients(1);
+        c_ = coefficients(2);
+        d_ = coefficients(3);
         init();
     }
 
@@ -110,6 +113,10 @@ private:
     }
 
 
+public:
+    MyPointcloud::Ptr pointcloud_;
+    Eigen::Vector3f color_;
+
 private:
     // General form
     float a_, b_, c_, d_;
@@ -118,9 +125,6 @@ private:
     // Eigen
     EigenPlane plane;
     // Points
-    MyPointcloud::Ptr pointcloud_;
-
-
 
 };
 
