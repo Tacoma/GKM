@@ -56,6 +56,7 @@ private:
 
     MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
+    MyPointcloud::Ptr pointcloud_debug_;
     
     std::vector<Plane::Ptr> planes_;
     

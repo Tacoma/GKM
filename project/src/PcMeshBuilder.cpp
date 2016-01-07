@@ -46,6 +46,7 @@ PcMeshBuilder::PcMeshBuilder()
     // init
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
+    pointcloud_debug_ = boost::make_shared<MyPointcloud>();
 
     // Setting up Dynamic Reconfiguration
 
@@ -184,6 +185,8 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 
 
 void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
+    pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+    MyPointcloud::Ptr cloud_cropped = cloud;
 
     MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
     Eigen::VectorXf coefficients, coefficients_refined;
@@ -214,8 +217,10 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
         extract.setIndices(inliers);
         extract.setNegative(false);
         extract.filter(*cloud_filtered);
+
         colorPointcloud(cloud_filtered, plane->color_);
-        plane->addPointcoud(cloud_filtered);
+        *(plane->pointcloud_) += *cloud_filtered;
+	*pointcloud_debug_ += *cloud_filtered;
 
         extract.setNegative(true);
         extract.filter(*cloud_filtered);
