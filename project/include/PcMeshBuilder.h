@@ -51,6 +51,7 @@ private:
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
+    ros::Publisher pub_markers_;
     dynamic_reconfigure::Server<project::projectConfig> server_;
 
     MyPointcloud::Ptr pointcloud_planar_;

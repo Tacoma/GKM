@@ -10,6 +10,10 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 
+#include <geometry_msgs/PolygonStamped.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <jsk_recognition_msgs/PolygonArray.h>
+
 #include <iostream>
 #include <eigen3/Eigen/src/Core/Matrix.h>
 #include "PcMeshBuilder.h"
@@ -30,17 +34,15 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                       };
 
 
-PcMeshBuilder::PcMeshBuilder() :
-    minPointsForEstimation_(30),
-    noisePercentage_(0.3f),
-    maxPlanesPerCloud_(3)
+PcMeshBuilder::PcMeshBuilder()
     {
 
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
-
+    pub_markers_ = nh_.advertise< geometry_msgs::PolygonStamped>("Hull", 10);
+    
     // init
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
@@ -213,7 +215,7 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
         extract.setNegative(false);
         extract.filter(*cloud_filtered);
         colorPointcloud(cloud_filtered, plane->color_);
-        *(plane->pointcloud_) += *cloud_filtered;
+        plane->addPointcoud(cloud_filtered);
 
         extract.setNegative(true);
         extract.filter(*cloud_filtered);
@@ -246,6 +248,10 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
     seg.setDistanceThreshold(distanceThreshold_);
+    
+    jsk_recognition_msgs::PolygonArray markers;
+    markers.header.frame_id = "world";
+    markers.header.stamp = ros::Time::now();
 
     // extract the planar inliers from the input cloud
     for(int i=0; i<num_planes && cloud_cropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
@@ -276,9 +282,26 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
 
         // Create plane and add points
         Plane::Ptr plane = boost::make_shared<Plane>(coefficients->values);
-        *(plane->pointcloud_) += *cloud_plane;
+        plane->addPointcoud(cloud_plane);
         plane->color_ = color;
         planes_.push_back(plane);
+	
+	if (true) {
+	    MyPointcloud::ConstPtr hull = plane->getHull();
+	    geometry_msgs::PolygonStamped polyStamped;
+	    // fill poly
+	    polyStamped.header.stamp = ros::Time::now();
+	    polyStamped.header.frame_id = "world";
+	    for (int i=0; i < hull->size(); i++) {
+		geometry_msgs::Point32 point;
+		point.x = hull->points[i].x;
+		point.y = hull->points[i].y;
+		point.z = hull->points[i].z;
+		polyStamped.polygon.points.push_back(point);
+	    }
+	    //markers.polygons.push_back(polyStamped);
+	    pub_markers_.publish(polyStamped);
+	}
 
         // Debugging
         if ( false ) {
@@ -304,6 +327,8 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
 
         i++;
     }
+    pub_markers_.publish(markers);
+    
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
     *pointcloud_planar_ = *cloud_union_planar;
     *pointcloud_non_planar_ = *cloud_cropped;
@@ -344,7 +369,7 @@ void PcMeshBuilder::publishPointclouds() {
     *union_cloud += *pointcloud_non_planar_;
 
     for (int i=0; i<planes_.size(); i++) {
-        *union_cloud += *(planes_[i]->pointcloud_);
+        *union_cloud += *(planes_[i]->getPointcloud());
     }
 
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
@@ -364,6 +389,9 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     distanceThreshold_ = config.distanceThreshold;
     windowSize_ = config.windowSize;
     windowPosY_ = config.windowPosY;
+    minPointsForEstimation_ = config.minPointsForEstimation;
+    noisePercentage_ = 1-config.planarPercentage;
+    maxPlanesPerCloud_ = config.maxPlanesPerCloud;
     if (last_msg_) {
         processMessage(last_msg_);
     }
