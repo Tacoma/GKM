@@ -207,11 +207,14 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
         model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
 
         // Refit the plane with new points only, if enough points were found. /TODO all points
-        if(inliers->size() >= minPointsForEstimation_) {
-            model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
-            plane->setPlane(coefficients_refined);
-            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
-        }
+//         if(inliers->size() >= minPointsForEstimation_) {
+// 	    temp.clear();
+// 	    model->setIndices(temp);
+// 	    model->setInputCloud(plane->getPointcloud());
+//             model->optimizeModelCoefficients(*(model->getIndices()), coefficients, coefficients_refined);
+//             plane->setPlane(coefficients_refined);
+//             model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
+//         }
 
         // Extract the inliers
         extract.setInputCloud(cloud);
@@ -220,7 +223,8 @@ void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
         extract.filter(*cloud_filtered);
 
         colorPointcloud(cloud_filtered, plane->color_);
-        plane->addPointcoud(cloud_filtered);
+        plane->addPointcoud(cloud_filtered);\
+        plane->refitPlane();
         *pointcloud_debug_ += *cloud_filtered;
 
         extract.setNegative(true);
