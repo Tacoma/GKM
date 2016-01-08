@@ -1,11 +1,24 @@
 #ifndef PLANE_H
 #define PLANE_H
 
+//PointCloud#include <pcl/ModelCoefficients.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/project_inliers.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/surface/concave_hull.h>
+
+
 
 #include <Eigen/Core>
 #include <boost/shared_ptr.hpp>
 #include "sophus/sim3.hpp"
-#include "PcMeshBuilder.h"
+
+
+
 
 typedef Eigen::Hyperplane<float, 3> EigenPlane;
 
@@ -29,7 +42,6 @@ public:
     typedef boost::shared_ptr<Plane> Ptr;
 
     Plane(float a, float b, float c, float d) : a_(a), b_(b), c_(c), d_(d) {
-	pointcloud_ = boost::make_shared<MyPointcloud>();
         init();
     }
 
@@ -37,38 +49,38 @@ public:
         if (coefficients.size() != 4) {
             ROS_ERROR("Plane with wrong number of coefficients created");
         }
-        pointcloud_ = boost::make_shared<MyPointcloud>();
         a_ = coefficients[0];
         b_ = coefficients[1];
         c_ = coefficients[2];
         d_ = coefficients[3];
         init();
     }
+
     ~Plane() {}
 
     void init() {
+        pointcloud_ = boost::make_shared<MyPointcloud>();
+        hull_ = boost::make_shared<MyPointcloud>();
         calculateNormalForm(point_, normal_);
-        plane = EigenPlane(normal_, point_);
+        plane_ = EigenPlane(normal_, point_);
     }
+
+    Eigen::Vector3f rayIntersection(Eigen::Vector3f point, Eigen::Vector3f direction) {
+        direction.normalize();
+        Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(point, direction);
+        Eigen::Vector3f intersection = pline.intersectionPoint( plane_ );
+        return intersection;
+    }
+
 
     Eigen::Quaternionf getRotation() {
         Eigen::Quaternionf rotation;
         return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
     }
-
     void getNormalForm(Eigen::Vector3f &point, Eigen::Vector3f &normal) {
         normal = normal_;
         point = point_;
     }
-
-
-    Eigen::Vector3f rayIntersection(Eigen::Vector3f point, Eigen::Vector3f direction) {
-        direction.normalize();
-        Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(point, direction);
-        Eigen::Vector3f intersection = pline.intersectionPoint( plane );
-        return intersection;
-    }
-
     float getA() {
         return a_;
     }
@@ -87,14 +99,34 @@ public:
         return coeff;
     }
 
+
     void setPlane(const Eigen::VectorXf coefficients) {
-	if (coefficients.size() != 4) { return; }
+        if (coefficients.size() != 4) {
+            return;
+        }
         a_ = coefficients(0);
         b_ = coefficients(1);
         c_ = coefficients(2);
         d_ = coefficients(3);
-        init();
+        calculateNormalForm(point_, normal_);
+        plane_ = EigenPlane(normal_, point_);
     }
+
+    void addPointcoud(MyPointcloud::Ptr pc) {
+        *pointcloud_ += *pc;
+        createHull();
+    }
+
+    MyPointcloud::ConstPtr getPointcloud() {
+        MyPointcloud::ConstPtr cloud = pointcloud_;
+        return cloud;
+    }
+
+    MyPointcloud::ConstPtr getHull() {
+        MyPointcloud::ConstPtr cloud = hull_;
+        return cloud;
+    }
+
 
 
 private:
@@ -112,9 +144,23 @@ private:
         //}
     }
 
+    void createHull() {
+        // Create a Concave Hull representation of the projected inliers
+        pcl::ConvexHull<MyPoint> hull;
+        hull.setInputCloud (pointcloud_);
+        hull.setDimension(2);
+        hull.reconstruct (*hull_);
+//         std::stringstream ss;
+//         ss << "Hull: " << hull_->size();
+//         for (int i = 0; i < hull_->size(); i++) {
+//             if (i%3==0) ss << "\n";
+//             ss << hull_->points[i] << ", ";
+//         }
+//         ROS_INFO_STREAM(ss.str());
+    }
+
 
 public:
-    MyPointcloud::Ptr pointcloud_;
     Eigen::Vector3f color_;
 
 private:
@@ -123,9 +169,10 @@ private:
     // Normal form
     Eigen::Vector3f point_, normal_;
     // Eigen
-    EigenPlane plane;
+    EigenPlane plane_;
     // Points
-
+    MyPointcloud::Ptr pointcloud_;
+    MyPointcloud::Ptr hull_;
 };
 
 

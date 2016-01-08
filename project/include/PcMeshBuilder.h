@@ -38,6 +38,7 @@ public:
     void removeKnownPlanes(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
+    void publishPolygons();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
@@ -51,10 +52,12 @@ private:
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
+    ros::Publisher pub_markers_;
     dynamic_reconfigure::Server<project::projectConfig> server_;
 
     MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
+    MyPointcloud::Ptr pointcloud_debug_;
     
     std::vector<Plane::Ptr> planes_;
     
