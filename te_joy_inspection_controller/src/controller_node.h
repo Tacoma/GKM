@@ -65,7 +65,7 @@ public:
 
 private:
     void processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
-    bool testPlanes();
+    void testPlanes();
 
     ros::NodeHandle nh_;
 
