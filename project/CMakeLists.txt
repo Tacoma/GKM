@@ -32,7 +32,7 @@ include_directories(
 #  ${Eigen_INCLUDE_DIRS}
 )
 
-add_executable(${PROJECT_NAME} src/PcMeshBuilder.cpp)
+add_executable(${PROJECT_NAME} src/PcMeshBuilderV2.cpp)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 add_dependencies(project ${PROJECT_NAME}_gencfg)
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})

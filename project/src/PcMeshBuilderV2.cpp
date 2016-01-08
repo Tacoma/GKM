@@ -16,7 +16,7 @@
 
 #include <iostream>
 #include <eigen3/Eigen/src/Core/Matrix.h>
-#include "PcMeshBuilder.h"
+#include "PcMeshBuilderV2.h"
 
 
 const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
@@ -38,8 +38,13 @@ PcMeshBuilder::PcMeshBuilder()
 {
 
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessage, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessage, this);
+    if(stickToSurface_ == true){
+        sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+        sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+    }
+    //TODO: Add code for normal non sticking case
+
+
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
 
@@ -56,6 +61,8 @@ PcMeshBuilder::PcMeshBuilder()
     server_.setCallback(f);
 
     std::cout << "PcMeshBuilder started..." << std::endl;
+
+    planeExists_ = false;
 }
 
 PcMeshBuilder::~PcMeshBuilder() {
@@ -70,18 +77,26 @@ void PcMeshBuilder::reset() {
     last_frame_id_ = 0;
 }
 
-void PcMeshBuilder::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
+
     if (msg->isKeyframe) {
         last_msg_ = msg;
         MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
         Sophus::Sim3f pose;
+
         processPointcloud(msg, cloud, pose);
-        int size = cloud->size();
-        removeKnownPlanes(cloud);
-        findPlanes(cloud, pose, maxPlanesPerCloud_);
+
+        //Find the largest plane only if no plane exists
+        if(!planeExists_){
+            findPlanes(cloud, pose, 1);
+        }
+
+        // Refine the largest plane with new inliers
+        refinePlane(cloud);
+
         // add to vector and accumulated pointcloud
         publishPointclouds();
-    publishPolygons();
+
     } else {
         // check for reset
         if (last_frame_id_ > msg->id) {
@@ -185,48 +200,47 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 }
 
 
-void PcMeshBuilder::removeKnownPlanes(MyPointcloud::Ptr cloud) {
+void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
+
+    // Init
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
-    MyPointcloud::Ptr cloud_cropped = cloud;
-
     MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
-    Eigen::VectorXf coefficients, coefficients_refined;
-    boost::shared_ptr<std::vector<int> > inliers = boost::make_shared<std::vector<int> >();
-
-    pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
     pcl::ExtractIndices<MyPoint> extract;
 
-    for ( int i=0; i < planes_.size() ; i++) {
-        Plane::Ptr plane = planes_[i];
+    pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
+    std::vector< int > temp;
+    model->setIndices(temp); // Assures that indices are reset so setInputCloud() will create new ones
+    model->setInputCloud(cloud);
 
-        std::vector< int > temp;
-        model->setIndices(temp); // Assures that indices are reset so setInputCloud() will create new ones
-        model->setInputCloud(cloud);
-        coefficients = plane->getCoefficients();
+    boost::shared_ptr<std::vector<int> > inliers = boost::make_shared<std::vector<int> >();
 
-        model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
+    Plane::Ptr plane;
 
-        // Refit the plane with new points only, if enough points were found. /TODO all points
-        if(inliers->size() >= minPointsForEstimation_) {
-            model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
-            plane->setPlane(coefficients_refined);
-            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
-        }
+    Eigen::VectorXf coefficients, coefficients_refined;
+    coefficients = coefficients_[0];
 
-        // Extract the inliers
-        extract.setInputCloud(cloud);
-        extract.setIndices(inliers);
-        extract.setNegative(false);
-        extract.filter(*cloud_filtered);
+    // Find inliers to the best plane, and  refit the plane with new points only, if enough points were found.
+    model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
 
-        colorPointcloud(cloud_filtered, plane->color_);
-        plane->addPointcoud(cloud_filtered);
-        *pointcloud_debug_ += *cloud_filtered;
+    if(inliers->size() >= minPointsForEstimation_) {
+        model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
 
-        extract.setNegative(true);
-        extract.filter(*cloud_filtered);
-        cloud.swap(cloud_filtered);
+        // Get the updated inlier points
+        model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
+
     }
+
+    // Save the refined coefficients
+    coefficients_[0] = coefficients_refined;
+
+    // Extract the inliers
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*cloud_filtered);
+
+    *pointcloud_debug_ += *cloud_filtered;
+
 }
 
 
@@ -240,7 +254,6 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
 
     MyPointcloud::Ptr cloud_cropped = cloud;
     int size = cloud->size();
-    MyPointcloud::Ptr cloud_f = boost::make_shared<MyPointcloud>();
     MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
     MyPointcloud::Ptr cloud_plane = boost::make_shared<MyPointcloud>();
 
@@ -287,34 +300,11 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pos
         plane->addPointcoud(cloud_plane);
         plane->color_ = color;
         planes_.push_back(plane);
+        coefficients_.push_back(plane->getCoefficients());
 
-        if (true) {
-
-        }
-
-        // Debugging
-        if ( false ) {
-            // Find intersection closest to camera (along plane normal)
-            Eigen::Vector3f cam_t = pose.translation();
-            Eigen::Vector3f plane_point, plane_normal;
-            plane->getNormalForm(plane_point, plane_normal);
-            Eigen::Vector3f intersection = plane->rayIntersection(cam_t, plane_normal);
-            Eigen::Quaternionf plane_rot = plane->getRotation();
-
-
-            static tf::TransformBroadcaster br;
-            tf::Transform transform;
-            // Publish ray plane intersection
-            transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
-            transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "intersection"));
-            // Publish plane point
-            transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
-            //transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-            br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "point"));
-        }
-
+        planeExists_ = true;
         i++;
+
     }
 
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
@@ -351,17 +341,18 @@ inline int PcMeshBuilder::clamp(int x, int min, int max) {
 }
 
 void PcMeshBuilder::publishPointclouds() {
-    MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
+//    MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
-    *union_cloud += *pointcloud_planar_;
-    *union_cloud += *pointcloud_non_planar_;
+//    *union_cloud += *pointcloud_planar_;
+//    *union_cloud += *pointcloud_non_planar_;
 
-    for (int i=0; i<planes_.size(); i++) {
-        *union_cloud += *(planes_[i]->getPointcloud());
-    }
+//    for (int i=0; i<planes_.size(); i++) {
+//        *union_cloud += *(planes_[i]->getPointcloud());
+//    }
 
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*union_cloud, *msg);
+//    pcl::toROSMsg(*union_cloud, *msg);
+    pcl::toROSMsg(*pointcloud_debug_, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = "world";
 
@@ -403,8 +394,10 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     minPointsForEstimation_ = config.minPointsForEstimation;
     noisePercentage_ = 1-config.planarPercentage;
     maxPlanesPerCloud_ = config.maxPlanesPerCloud;
+    stickToSurface_ = config.stickToSurface;
+
     if (last_msg_) {
-        processMessage(last_msg_);
+        processMessageStickToSurface(last_msg_);
     }
 }
 
