@@ -7,7 +7,7 @@
 
   <node name="te_joy_controller" pkg="te_joy_controller" type="controller_node">
     <remap from="command/pose" to="$(arg mav_name)/command/pose" />
-    <remap from="vrpn_client/estimated_transform" to="$(arg mav_name)/vrpn_client/estimated_transform" />
+    <remap from="vrpn_client/estimated_transform" to="$(arg mav_name)/msf_core/pose" />
     <param name="speedUp" value="0.5" />
     <param name="speedRight" value="0.6" />
     <param name="speedForward" value="0.6" />
