@@ -49,6 +49,8 @@ Controller::Controller() :
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+    ROS_ERROR_STREAM("Got a PoseWithCovarianceStamped MSG");
+
     mocap_tf_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
     mocap_tf_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
@@ -62,10 +64,17 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
         }
     }
 
-    testPlanes();
-
     // world transform
-    tf::Transform curr_transform = mocap_tf_ * transform_;
+    tf::Transform curr_transform;
+    /// stick to plane
+    if(stick_to_plane_) {
+        testPlanes();
+        tf::Vector3 diff = snap_goal_tf_.getOrigin() - mocap_tf_.getOrigin();
+        curr_transform.setOrigin(mocap_tf_.getOrigin() + correction_speed_*diff);
+        curr_transform.setRotation(snap_goal_tf_.getRotation());
+    } else {
+        curr_transform = mocap_tf_ * transform_;
+    }
 
     // convert tf into pose and publish the pose
     tf::Vector3 desired_pos = curr_transform.getOrigin();
@@ -89,6 +98,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     br_tf_.sendTransform( tf::StampedTransform(curr_transform, ros::Time::now(), "world", "controller") );
 }
 
+// TODO delete prev_msg_ if it is not used / needed
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     prev_msg_ = joy;
 
@@ -99,10 +109,10 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     // yaw from axis
     float jr = speedYaw_ * joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS];
 
-    // save only the latest relative transform in global transform
+    // save only the latest relative transform in global variable transform_
     transform_.setOrigin( tf::Vector3(jx,jy,jz) );
     tf::Quaternion q;
-    q.setRPY(0, 0, jr);
+    q.setRPY(0,0,jr);
     transform_.setRotation(q);
 
     /// buttons
@@ -120,40 +130,6 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     if(joy->buttons[PS3_BUTTON_CROSS_DOWN]) {
         sticking_distance_ += 0.005f;
     }
-
-    /// stick to plane
-    if(stick_to_plane_) {
-        testPlanes();
-        // if we are nearer than sticking distance use new snap_goal_tf
-        tf::Vector3 diff = snap_goal_tf_.getOrigin() - mocap_tf_.getOrigin();
-        transform_.setOrigin(correction_speed_ * diff);
-
-        mocap_tf_.setOrigin( mocap_tf_.getOrigin() + transform_.getOrigin());
-        mocap_tf_.setRotation(snap_goal_tf_.getRotation());
-    } else {
-        mocap_tf_ *= transform_;
-    }
-
-    /// convert tf into pose and publish the pose
-    tf::Vector3 desired_pos = mocap_tf_.getOrigin();
-    tf::Quaternion desired_rot = mocap_tf_.getRotation();
-
-    geometry_msgs::PoseStamped pose;
-    // set header
-    pose.header.stamp = ros::Time::now();
-    pose.header.frame_id = "world";
-    // set pose
-    pose.pose.position.x = desired_pos.x();
-    pose.pose.position.y = desired_pos.y();
-    pose.pose.position.z = desired_pos.z();
-    pose.pose.orientation.x = desired_rot.x();
-    pose.pose.orientation.y = desired_rot.y();
-    pose.pose.orientation.z = desired_rot.z();
-    pose.pose.orientation.w = desired_rot.w();
-    pub_pose_.publish(pose);
-
-    // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(mocap_tf_, ros::Time::now(), "world", "controller") );
 }
 
 void Controller::takeoffAndHover() {
@@ -174,10 +150,11 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
 }
 
 void Controller::testPlanes() {
+    ROS_ERROR_STREAM("Testing planes");
+
     //// mav
     // predicted mav tf
     tf::Transform mav_tf = mocap_tf_ * transform_;
-//    mav_tf.setOrigin( mav_tf.getOrigin() + () );
 
     // Eigen conversions
     Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
