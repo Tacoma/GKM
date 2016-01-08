@@ -39,7 +39,9 @@ Controller::Controller() :
 
     // init plane_tf
     plane_tf_.setOrigin(tf::Vector3(2,0,0));
-    plane_tf_.setRotation(q);
+    tf::Quaternion plane_q;
+    plane_q.setRPY(0,0,-M_PI/4.f);
+    plane_tf_.setRotation(plane_q);
 
     // init snap_goal_tf
     snap_goal_tf_.setOrigin(tf::Vector3(0,0,0));
@@ -120,7 +122,8 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     }
 
     /// stick to plane
-    if(stick_to_plane_ && testPlanes()) {
+    if(stick_to_plane_) {
+        testPlanes();
         // if we are nearer than sticking distance use new snap_goal_tf
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mocap_tf_.getOrigin();
         transform_.setOrigin(correction_speed_ * diff);
@@ -170,10 +173,11 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 }
 
-bool Controller::testPlanes() {
+void Controller::testPlanes() {
     //// mav
     // predicted mav tf
     tf::Transform mav_tf = mocap_tf_ * transform_;
+//    mav_tf.setOrigin( mav_tf.getOrigin() + () );
 
     // Eigen conversions
     Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
@@ -194,23 +198,13 @@ bool Controller::testPlanes() {
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), mocap_tf_.getOrigin().z());
 
-    // if we are further away than sticking distance we don't want to snap and return false
-    if(fabs(normal.dot(mav_pos-plane_pos)) >= sticking_distance_) {
-        return false;
-    }
-
     int facing = normal.dot(curr_pos-plane_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
 
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    snap_goal_tf_.setRotation( mocap_tf_.getRotation() * transform_.getRotation() );
-
-    // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(snap_goal_tf_, ros::Time::now(), "world", "goal") );
-
-    return true;
+    snap_goal_tf_.setRotation(plane_tf_.getRotation());
 }
 
 
