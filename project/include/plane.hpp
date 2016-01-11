@@ -126,16 +126,16 @@ public:
         MyPointcloud::ConstPtr cloud = hull_;
         return cloud;
     }
-    
+
     void refitPlane() {
-	applyEuclideanFilter();
-	pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = 
-		boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(pointcloud_);
-		
-	Eigen::VectorXf coefficients(4), coefficients_refined(4);
-	coefficients << a_, b_, c_, d_;
-	model->optimizeModelCoefficients(*(model->getIndices()), coefficients, coefficients_refined);
-	setPlane(coefficients_refined);
+        applyEuclideanFilter();
+        pcl::SampleConsensusModelPlane<MyPoint>::Ptr model =
+            boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(pointcloud_);
+
+        Eigen::VectorXf coefficients(4), coefficients_refined(4);
+        coefficients << a_, b_, c_, d_;
+        model->optimizeModelCoefficients(*(model->getIndices()), coefficients, coefficients_refined);
+        setPlane(coefficients_refined);
     }
 
 private:
@@ -167,47 +167,47 @@ private:
 //         }
 //         ROS_INFO_STREAM(ss.str());
     }
-    
+
     void applyEuclideanFilter() {
-	pcl::search::KdTree<MyPoint>::Ptr kdTree = 
-	    boost::make_shared<pcl::search::KdTree<MyPoint> >(new pcl::search::KdTree<MyPoint>);
-	kdTree->setInputCloud(pointcloud_);
-	// Euclidean clustering object. (flood fill)
-	pcl::EuclideanClusterExtraction<MyPoint> clustering;
-	// Set cluster tolerance to 2cm
-	clustering.setClusterTolerance(0.02);
-	// Set the minimum and maximum number of points that a cluster can have.
-	clustering.setMinClusterSize(0);
-	clustering.setMaxClusterSize(pointcloud_->size());
-	clustering.setSearchMethod(kdTree);
-	clustering.setInputCloud(pointcloud_);
-	std::vector<pcl::PointIndices> clusters;
-	clustering.extract(clusters);
-	pcl::PointIndices::Ptr inliers = boost::make_shared<pcl::PointIndices>(clusters[0]);
-	
-	
-	//Extract largest cluster
-	MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
-	pcl::ExtractIndices<MyPoint> extract;
-	extract.setInputCloud(pointcloud_);
+        pcl::search::KdTree<MyPoint>::Ptr kdTree =
+            boost::make_shared<pcl::search::KdTree<MyPoint> >(new pcl::search::KdTree<MyPoint>);
+        kdTree->setInputCloud(pointcloud_);
+        // Euclidean clustering object. (flood fill)
+        pcl::EuclideanClusterExtraction<MyPoint> clustering;
+        // Set cluster tolerance to 2cm
+        clustering.setClusterTolerance(0.02);
+        // Set the minimum and maximum number of points that a cluster can have.
+        clustering.setMinClusterSize(0);
+        clustering.setMaxClusterSize(pointcloud_->size());
+        clustering.setSearchMethod(kdTree);
+        clustering.setInputCloud(pointcloud_);
+        std::vector<pcl::PointIndices> clusters;
+        clustering.extract(clusters);
+        pcl::PointIndices::Ptr inliers = boost::make_shared<pcl::PointIndices>(clusters[0]);
+
+
+        //Extract largest cluster
+        MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
+        pcl::ExtractIndices<MyPoint> extract;
+        extract.setInputCloud(pointcloud_);
         extract.setIndices(inliers);
         extract.setNegative(false);
         extract.filter(*cloud_filtered);
-	pointcloud_.swap(cloud_filtered);
+        pointcloud_.swap(cloud_filtered);
     }
-    
+
 public:
     Eigen::Vector3f color_;
-    
+
 private:
     // General Form
     float a_, b_, c_, d_;
     // Normal Form
     Eigen::Vector3f point_, normal_;
     // Eigen
-    
-   EigenPlane plane_;
-    
+
+    EigenPlane plane_;
+
     // Points
     MyPointcloud::Ptr pointcloud_;
     MyPointcloud::Ptr hull_;

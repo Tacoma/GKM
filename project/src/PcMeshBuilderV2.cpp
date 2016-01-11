@@ -42,6 +42,7 @@ PcMeshBuilder::PcMeshBuilder()
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
+    pub_tf_ = nh_.advertise< geometry_msgs::TransformStamped>("plane", 10);
 
     // init
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
@@ -74,7 +75,7 @@ void PcMeshBuilder::reset() {
 
 void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
 
-    if(stickToSurface_ == true){
+    if(stickToSurface_ == true) {
 
         if (msg->isKeyframe) {
             last_msg_ = msg;
@@ -84,12 +85,15 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
             processPointcloud(msg, cloud, pose);
 
             //Find the largest plane only if no plane exists
-            if(!planeExists_){
+            if(!planeExists_) {
                 findPlanes(cloud, pose, 1);
             }
 
             // Refine the largest plane with new inliers
             refinePlane(cloud);
+	    
+	    //publish plane
+	    publishPlane(pose);
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
@@ -378,6 +382,30 @@ void PcMeshBuilder::publishPolygons() {
         markers.polygons.push_back(polyStamped);
     }
     pub_markers_.publish(markers);
+}
+
+void PcMeshBuilder::publishPlane(const Sophus::Sim3f &pose) {
+
+    // calculate Plane position
+    Plane plane(coefficients_[0][0], coefficients_[0][1], coefficients_[0][2], coefficients_[0][3]);
+    Eigen::Vector3f cam_t = pose.translation();
+    Eigen::Vector3f plane_point, plane_normal;
+    plane.getNormalForm(plane_point, plane_normal);
+    Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
+    Eigen::Quaternionf plane_rot = plane.getRotation();
+
+    // publish
+    geometry_msgs::TransformStamped tf;
+    tf.header.stamp = ros::Time::now();
+    tf.header.frame_id = "world";
+    tf.transform.translation.x = intersection.x();
+    tf.transform.translation.y = intersection.y();
+    tf.transform.translation.z = intersection.z();
+    tf.transform.rotation.x = plane_rot.x();
+    tf.transform.rotation.y = plane_rot.y();
+    tf.transform.rotation.z = plane_rot.z();
+    tf.transform.rotation.w = plane_rot.w();
+    pub_tf_.publish(tf);
 }
 
 

@@ -41,6 +41,7 @@ public:
     void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
     void publishPointclouds();
     void publishPolygons();
+    void publishPlane(const Sophus::Sim3f &pose);
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
@@ -55,6 +56,7 @@ private:
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
     ros::Publisher pub_markers_;
+    ros::Publisher pub_tf_;	// publish wall position
     dynamic_reconfigure::Server<project::projectConfig> server_;
 
     MyPointcloud::Ptr pointcloud_planar_;
