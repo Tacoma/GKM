@@ -38,13 +38,8 @@ PcMeshBuilder::PcMeshBuilder()
 {
 
     // subscriber and publisher
-    if(stickToSurface_ == true){
-        sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-        sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-    }
-    //TODO: Add code for normal non sticking case
-
-
+    sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+    sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
 
@@ -79,31 +74,34 @@ void PcMeshBuilder::reset() {
 
 void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
 
-    if (msg->isKeyframe) {
-        last_msg_ = msg;
-        MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
-        Sophus::Sim3f pose;
+    if(stickToSurface_ == true){
 
-        processPointcloud(msg, cloud, pose);
+        if (msg->isKeyframe) {
+            last_msg_ = msg;
+            MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
+            Sophus::Sim3f pose;
 
-        //Find the largest plane only if no plane exists
-        if(!planeExists_){
-            findPlanes(cloud, pose, 1);
+            processPointcloud(msg, cloud, pose);
+
+            //Find the largest plane only if no plane exists
+            if(!planeExists_){
+                findPlanes(cloud, pose, 1);
+            }
+
+            // Refine the largest plane with new inliers
+            refinePlane(cloud);
+
+            // add to vector and accumulated pointcloud
+            publishPointclouds();
+
+        } else {
+            // check for reset
+            if (last_frame_id_ > msg->id) {
+                ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
+                reset();
+            }
+            last_frame_id_ = msg->id;
         }
-
-        // Refine the largest plane with new inliers
-        refinePlane(cloud);
-
-        // add to vector and accumulated pointcloud
-        publishPointclouds();
-
-    } else {
-        // check for reset
-        if (last_frame_id_ > msg->id) {
-            ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
-            reset();
-        }
-        last_frame_id_ = msg->id;
     }
 }
 
