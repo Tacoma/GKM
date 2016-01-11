@@ -150,8 +150,6 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
 }
 
 void Controller::testPlanes() {
-    ROS_ERROR_STREAM("Testing planes");
-
     //// mav
     // predicted mav tf
     tf::Transform mav_tf = mocap_tf_ * transform_;
