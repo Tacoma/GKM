@@ -66,9 +66,14 @@ PcMeshBuilder::~PcMeshBuilder() {
 }
 
 void PcMeshBuilder::reset() {
+
+    std::cout << "resetting PcMeshBuilder..." << std::endl;
+
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
     planes_.clear();
+    coefficients_.clear();
+    planeExists_ = false;
 
     last_frame_id_ = 0;
 }
@@ -86,26 +91,30 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 
             //Find the largest plane only if no plane exists
             if(!planeExists_) {
+
+                std::cout << "Finding largest plane..." << std::endl;
+                coefficients_.clear();
                 findPlanes(cloud, pose, 1);
             }
 
             // Refine the largest plane with new inliers
+            std::cout << "refining Plane coefficients..." << std::endl;
             refinePlane(cloud);
 	    
-	    //publish plane
-	    publishPlane(pose);
+            //publish plane
+            publishPlane(pose);
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
 
-        } else {
+        } /*else {
             // check for reset
             if (last_frame_id_ > msg->id) {
                 ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
                 reset();
             }
             last_frame_id_ = msg->id;
-        }
+        }*/
     }
 }
 
@@ -227,13 +236,12 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     if(inliers->size() >= minPointsForEstimation_) {
         model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
 
-        // Get the updated inlier points
-        model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
-
+        // Get the updated inlier points and save the updated Coefficients
+        if(coefficients_refined.size() == 4){
+            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
+            coefficients_[0] = coefficients_refined;
+        }
     }
-
-    // Save the refined coefficients
-    coefficients_[0] = coefficients_refined;
 
     // Extract the inliers
     extract.setInputCloud(cloud);
@@ -343,17 +351,8 @@ inline int PcMeshBuilder::clamp(int x, int min, int max) {
 }
 
 void PcMeshBuilder::publishPointclouds() {
-//    MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
-
-//    *union_cloud += *pointcloud_planar_;
-//    *union_cloud += *pointcloud_non_planar_;
-
-//    for (int i=0; i<planes_.size(); i++) {
-//        *union_cloud += *(planes_[i]->getPointcloud());
-//    }
 
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
-//    pcl::toROSMsg(*union_cloud, *msg);
     pcl::toROSMsg(*pointcloud_debug_, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = "world";
@@ -410,6 +409,9 @@ void PcMeshBuilder::publishPlane(const Sophus::Sim3f &pose) {
 
 
 void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {
+
+    std::cout << "Configurating..." << std::endl;
+
     scaledDepthVarTH_ = pow(10.0f , config.scaledDepthVarTH );
     absDepthVarTH_ = pow(10.0f, config.absDepthVarTH);
     minNearSupport_ = config.minNearSupport;
@@ -421,10 +423,12 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     noisePercentage_ = 1-config.planarPercentage;
     maxPlanesPerCloud_ = config.maxPlanesPerCloud;
     stickToSurface_ = config.stickToSurface;
-
+    planeExists_ = false; // Resetting the plane.
     if (last_msg_) {
         processMessageStickToSurface(last_msg_);
     }
+
+
 }
 
 int main(int argc, char** argv) {
