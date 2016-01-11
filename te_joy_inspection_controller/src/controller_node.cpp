@@ -3,7 +3,7 @@
 #include <iostream>
 
 Controller::Controller() :
-    speedX_(0.05f), speedY_(0.05f), speedZ_(0.05f), speedYaw_(0.01f), goal_reached_(true),
+    speedX_(1.05f), speedY_(1.05f), speedZ_(1.05f), speedYaw_(1.01f), goal_reached_(true),
     stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f) {
 
     std::cout << "Controller node started..." << std::endl;
@@ -12,13 +12,15 @@ Controller::Controller() :
     nh_.param("speedForward", speedX_, speedX_);
     nh_.param("speedRight", speedY_, speedY_);
     nh_.param("speedUp", speedZ_, speedZ_);
-    nh_.param("speedYawn", speedYaw_, speedYaw_);
+    nh_.param("speedYaw", speedYaw_, speedYaw_);
 
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("vrpn_client/estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("planes", 10, &Controller::processPlaneMsg, this);
+    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processPlaneMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
+
+    ROS_INFO_STREAM("speeds" << speedX_ << speedY_ << speedZ_ << speedYaw_);
 
     // identity rotation matrix as quaternion
     tf::Quaternion q;
@@ -49,8 +51,6 @@ Controller::Controller() :
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
-    ROS_ERROR_STREAM("Got a PoseWithCovarianceStamped MSG");
-
     mocap_tf_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
     mocap_tf_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
