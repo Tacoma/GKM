@@ -205,7 +205,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     } // y
     // refit pointcloud and search for planes
     cloud->resize(numPoints);
-    pcl::transformPointCloud(*cloud,*cloud,pose.matrix());
+    //pcl::transformPointCloud(*cloud,*cloud,pose.matrix());
 
     delete[] originalInput_;
 }
@@ -387,7 +387,7 @@ void PcMeshBuilder::publishPlane(const Sophus::Sim3f &pose) {
 
     // calculate Plane position
     Plane plane(coefficients_[0][0], coefficients_[0][1], coefficients_[0][2], coefficients_[0][3]);
-    Eigen::Vector3f cam_t = pose.translation();
+    Eigen::Vector3f cam_t(0,0,0);// = pose.translation();
     Eigen::Vector3f plane_point, plane_normal;
     plane.getNormalForm(plane_point, plane_normal);
     Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
