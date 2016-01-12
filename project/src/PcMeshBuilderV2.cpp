@@ -74,16 +74,20 @@ void PcMeshBuilder::reset() {
     planes_.clear();
     coefficients_.clear();
     planeExists_ = false;
+    
 
     last_frame_id_ = 0;
 }
 
 void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg) {
 
-    if(stickToSurface_ == true) {
+    
 
         if (msg->isKeyframe) {
             last_msg_ = msg;
+
+	    if(stickToSurface_ == true) {
+
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
             Sophus::Sim3f pose;
 
@@ -96,10 +100,11 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
                 coefficients_.clear();
                 findPlanes(cloud, pose, 1);
             }
-
-            // Refine the largest plane with new inliers
-            std::cout << "refining Plane coefficients..." << std::endl;
-            refinePlane(cloud);
+	    else {
+            	// Refine the largest plane with new inliers
+            	std::cout << "refining Plane coefficients..." << std::endl;
+            	refinePlane(cloud);
+	    }
 	    
             //publish plane
             publishPlane(pose);
@@ -107,15 +112,17 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
             // add to vector and accumulated pointcloud
             publishPointclouds();
 
-        } /*else {
+	}
+
+        } else {
             // check for reset
             if (last_frame_id_ > msg->id) {
                 ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
                 reset();
             }
             last_frame_id_ = msg->id;
-        }*/
-    }
+        }
+    
 }
 
 void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose) {
@@ -422,8 +429,11 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     minPointsForEstimation_ = config.minPointsForEstimation;
     noisePercentage_ = 1-config.planarPercentage;
     maxPlanesPerCloud_ = config.maxPlanesPerCloud;
+    bool temp = stickToSurface_;
     stickToSurface_ = config.stickToSurface;
-    planeExists_ = false; // Resetting the plane.
+    if ( temp != stickToSurface_) {
+    	planeExists_ = false; // Resetting the plane.
+    }
     if (last_msg_) {
         processMessageStickToSurface(last_msg_);
     }

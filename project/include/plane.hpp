@@ -75,7 +75,7 @@ public:
 
     Eigen::Quaternionf getRotation() {
         Eigen::Quaternionf rotation;
-        return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
+        return rotation.FromTwoVectors(Eigen::Vector3f(0,0,-1), normal_);
     }
     void getNormalForm(Eigen::Vector3f &point, Eigen::Vector3f &normal) {
         normal = normal_;
