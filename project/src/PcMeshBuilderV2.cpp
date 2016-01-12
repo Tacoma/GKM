@@ -102,7 +102,6 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
             }
 	    else {
             	// Refine the largest plane with new inliers
-            	std::cout << "refining Plane coefficients..." << std::endl;
             	refinePlane(cloud);
 	    }
 	    
@@ -219,6 +218,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 
 
 void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
+    std::cout << "refining Plane coefficients...";
 
     // Init
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
@@ -247,6 +247,9 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
         if(coefficients_refined.size() == 4){
             model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers);
             coefficients_[0] = coefficients_refined;
+            std::cout << "Found." << std::endl;
+        } else {
+            std::cout << "Can not find a refinement." << std::endl;
         }
     }
 

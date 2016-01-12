@@ -144,6 +144,7 @@ void Controller::takeoffAndHover() {
     hover_goal_tf_.setRotation(desired_rot);
 }
 
+// TODO add constant offset transform for camera
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
     // realtive plane transform to mav
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
