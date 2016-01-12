@@ -12,7 +12,7 @@
 
 #include <geometry_msgs/PolygonStamped.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <jsk_recognition_msgs/PolygonArray.h>
+//#include <jsk_recognition_msgs/PolygonArray.h>
 
 #include <iostream>
 #include <eigen3/Eigen/src/Core/Matrix.h>
@@ -41,7 +41,7 @@ PcMeshBuilder::PcMeshBuilder()
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
-    pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
+    //pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
     pub_tf_ = nh_.advertise< geometry_msgs::TransformStamped>("plane", 10);
 
     // init
@@ -361,26 +361,26 @@ void PcMeshBuilder::publishPointclouds() {
 }
 
 void PcMeshBuilder::publishPolygons() {
-    jsk_recognition_msgs::PolygonArray markers;
-    markers.header.frame_id = "world";
-    markers.header.stamp = ros::Time::now();
-
-    geometry_msgs::PolygonStamped polyStamped;
-    polyStamped.header.stamp = ros::Time::now();
-    polyStamped.header.frame_id = "world";
-
-    for (int i=0; i<planes_.size(); i++) {
-        MyPointcloud::ConstPtr hull = planes_[i]->getHull();
-        for (int i=0; i < hull->size(); i++) {
-            geometry_msgs::Point32 point;
-            point.x = hull->points[i].x;
-            point.y = hull->points[i].y;
-            point.z = hull->points[i].z;
-            polyStamped.polygon.points.push_back(point);
-        }
-        markers.polygons.push_back(polyStamped);
-    }
-    pub_markers_.publish(markers);
+//     jsk_recognition_msgs::PolygonArray markers;
+//     markers.header.frame_id = "world";
+//     markers.header.stamp = ros::Time::now();
+// 
+//     geometry_msgs::PolygonStamped polyStamped;
+//     polyStamped.header.stamp = ros::Time::now();
+//     polyStamped.header.frame_id = "world";
+// 
+//     for (int i=0; i<planes_.size(); i++) {
+//         MyPointcloud::ConstPtr hull = planes_[i]->getHull();
+//         for (int i=0; i < hull->size(); i++) {
+//             geometry_msgs::Point32 point;
+//             point.x = hull->points[i].x;
+//             point.y = hull->points[i].y;
+//             point.z = hull->points[i].z;
+//             polyStamped.polygon.points.push_back(point);
+//         }
+//         markers.polygons.push_back(polyStamped);
+//     }
+//     pub_markers_.publish(markers);
 }
 
 void PcMeshBuilder::publishPlane(const Sophus::Sim3f &pose) {
