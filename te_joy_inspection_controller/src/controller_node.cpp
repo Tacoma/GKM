@@ -145,8 +145,12 @@ void Controller::takeoffAndHover() {
 }
 
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
+    // realtive plane transform to mav
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+
+    // transform into global coordinates
+    plane_tf_ = plane_tf_*mocap_tf_;
 }
 
 void Controller::testPlanes() {

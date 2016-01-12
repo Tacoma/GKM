@@ -19,10 +19,10 @@
     <node name="te_joy_inspection_controller" pkg="te_joy_inspection_controller" type="controller_node">
       <remap from="command/pose" to="command/pose" />
       <remap from="vrpn_client/estimated_transform" to="msf_core/pose" />
-      <param name="speedUp" value="500.5" />
-      <param name="speedRight" value="500.6" />
-      <param name="speedForward" value="500.6" />
-      <param name="speedYaw" value="500.05" />
+      <param name="speedUp" value="1.5" />
+      <param name="speedRight" value="1.6" />
+      <param name="speedForward" value="1.6" />
+      <param name="speedYaw" value="1.05" />
     </node>
     
       <!-- start plane detection -->
