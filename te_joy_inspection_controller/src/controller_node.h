@@ -85,6 +85,7 @@ private:
     tf::Transform hover_goal_tf_;
 
     // TODO bool isPlaneActive;
+    bool search_for_plane_;
     bool stick_to_plane_;
     float sticking_distance_;
     float correction_speed_;
