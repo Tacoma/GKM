@@ -22,7 +22,7 @@ Controller::Controller() :
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("stickToSurface", 10);
 
-    ROS_INFO_STREAM("speeds" << speedX_ << speedY_ << speedZ_ << speedYaw_);
+    std::cout << "speeds: " << speedX_ << " " << speedY_ << " " << speedZ_ << " " << speedYaw_ << std::endl;
 
     // identity rotation matrix as quaternion
     tf::Quaternion q;
@@ -100,10 +100,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     br_tf_.sendTransform( tf::StampedTransform(curr_transform, ros::Time::now(), "world", "controller") );
 }
 
-// TODO delete prev_msg_ if it is not used / needed
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
-    prev_msg_ = joy;
-
     /// translation from controller axis
     float jx = speedX_ * joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS];
     float jy = speedY_ * joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS];
@@ -119,17 +116,23 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
 
     /// buttons
     // tell PcMeshBuilder to search for a plane
-    if(joy->buttons[PS3_BUTTON_ACTION_CROSS]) {
-        search_for_plane_ = !search_for_plane_;
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1]) {
+        search_for_plane_ = true;
+        std_msgs::Bool sticking;
+        sticking.data = search_for_plane_;
+        pub_stickToSurface_.publish(sticking);
+    }
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1]) {
+        search_for_plane_ = false;
         std_msgs::Bool sticking;
         sticking.data = search_for_plane_;
         pub_stickToSurface_.publish(sticking);
     }
     // enable or disable sticking to the plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1]) {
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2] && search_for_plane_) {
         stick_to_plane_ = true;
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1]) {
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2] && search_for_plane_) {
         stick_to_plane_ = false;
     }
     // sticking distance

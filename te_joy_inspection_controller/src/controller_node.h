@@ -77,7 +77,6 @@ private:
     ros::Publisher pub_stickToSurface_;
     tf::TransformBroadcaster br_tf_;
 
-    sensor_msgs::Joy::ConstPtr prev_msg_;
     tf::Transform mocap_tf_;
     tf::Transform transform_;
 
