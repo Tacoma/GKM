@@ -132,7 +132,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2] && search_for_plane_) {
         stick_to_plane_ = true;
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2] && search_for_plane_) {
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
         stick_to_plane_ = false;
     }
     // sticking distance
