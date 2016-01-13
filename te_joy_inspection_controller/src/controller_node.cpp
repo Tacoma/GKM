@@ -1,4 +1,5 @@
 #include "controller_node.h"
+#include <std_msgs/Bool.h>
 #include <std_srvs/Empty.h>
 #include <iostream>
 
@@ -19,6 +20,7 @@ Controller::Controller() :
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("vrpn_client/estimated_transform", 10, &Controller::setMocapPose, this);
     sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processPlaneMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
+    pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("stickToSurface", 10);
 
     ROS_INFO_STREAM("speeds" << speedX_ << speedY_ << speedZ_ << speedYaw_);
 
@@ -119,9 +121,15 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     // enable or disable sticking to the plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1]) {
         stick_to_plane_ = true;
+        std_msgs::Bool sticking;
+        sticking.data = stick_to_plane_;
+        pub_stickToSurface_.publish(sticking);
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_1]) {
         stick_to_plane_ = false;
+        std_msgs::Bool sticking;
+        sticking.data = stick_to_plane_;
+        pub_stickToSurface_.publish(sticking);
     }
     // sticking distance
     if(joy->buttons[PS3_BUTTON_CROSS_UP] && sticking_distance_ > 0.05f) {

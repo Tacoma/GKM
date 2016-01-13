@@ -40,9 +40,10 @@ PcMeshBuilder::PcMeshBuilder()
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
     pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pub_tf_ = nh_.advertise< geometry_msgs::TransformStamped>("plane", 10);
+    pub_tf_ = nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
 
     // init
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
@@ -77,6 +78,14 @@ void PcMeshBuilder::reset() {
     
 
     last_frame_id_ = 0;
+}
+
+void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
+    bool temp = stickToSurface_;
+    stickToSurface_ = msg->data;
+    if (temp != stickToSurface_) {
+        planeExists_ = false; // resetting the plane.
+    }
 }
 
 void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg) {

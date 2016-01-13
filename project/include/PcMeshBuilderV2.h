@@ -11,6 +11,7 @@
 #include <lsd_slam_msgs/keyframeMsg.h>
 #include <lsd_slam_msgs/keyframeGraphMsg.h>
 #include <tf/transform_broadcaster.h>
+#include <std_msgs/Bool.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Pose.h>
 // Dynamic Reconfiguration
@@ -34,6 +35,7 @@ public:
     ~PcMeshBuilder();
 
 //    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    void setStickToSurface(const std_msgs::Bool::ConstPtr& msg);
     void processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
 //    void removeKnownPlanes(MyPointcloud::Ptr cloud);
@@ -54,6 +56,7 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
+    ros::Subscriber sub_stickToSurface_;      // gets sticking bool from joystick
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
     ros::Publisher pub_markers_;
     ros::Publisher pub_tf_;	// publish wall position
