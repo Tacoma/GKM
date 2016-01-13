@@ -187,6 +187,7 @@ void Controller::testPlanes() {
     //// calculations
     Eigen::Vector3f normal = plane_rot*forward;
     normal.normalize();
+    normal = -normal;
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), mocap_tf_.getOrigin().z());
 

@@ -87,6 +87,7 @@ void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
     stickToSurface_ = msg->data;
     if (temp != stickToSurface_) {
         planeExists_ = false; // resetting the plane.
+        pointcloud_debug_ = boost::make_shared<MyPointcloud>();
     }
 }
 
@@ -97,9 +98,7 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
         last_msg_ = msg;
 
         if(stickToSurface_ == true) {
-
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
-
             processPointcloud(msg, cloud);
 
             //Find the largest plane only if no plane exists
@@ -107,9 +106,9 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
                 std::cout << "Searching largest plane" << std::endl;
                 findPlanes(cloud, 1);
             } else {
-		// Refine the largest plane with new inliers
-		refinePlane(cloud);
-	    }
+                // Refine the largest plane with new inliers
+                refinePlane(cloud);
+            }
 
             //publish plane
             publishPlane();
@@ -242,6 +241,14 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     Eigen::VectorXf coefficients, coefficients_refined;
     //TODO transform plane into new frame
     Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
+    std::cout << std::endl << "Matrix: " << std::endl;
+    for(int i=0; i<4; i++) {
+        for(int j=0; j<4; j++) {
+            std::cout << transform(i,j) << ", ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
     //plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
@@ -268,7 +275,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     extract.setIndices(inliers);
     extract.setNegative(false);
     extract.filter(*cloud_filtered);
-    *pointcloud_debug_ += *cloud_filtered;
+    *pointcloud_debug_ = *cloud_filtered;
 
     std::cout << std::endl;
 }
