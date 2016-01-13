@@ -39,13 +39,13 @@ public:
 //    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void setStickToSurface(const std_msgs::Bool::ConstPtr& msg);
     void processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose);
+    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
 //    void removeKnownPlanes(MyPointcloud::Ptr cloud);
     void refinePlane(MyPointcloud::Ptr cloud);
-    void findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes=3);
+    void findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes=3);
     void publishPointclouds();
     void publishPolygons();
-    void publishPlane(const Sophus::Sim3f &pose);
+    void publishPlane();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
@@ -95,6 +95,8 @@ private:
     int nextColor_;
     lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
     unsigned int last_frame_id_;
+    Sophus::Sim3f last_pose_;
+    Sophus::Sim3f current_pose_;
 
 
 };

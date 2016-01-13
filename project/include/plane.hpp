@@ -147,8 +147,6 @@ private:
         point_out = -d_/length * normal_out;
     }
 
-    void calculateParameterForm(Eigen::Vector3f &normal, Eigen::Vector3f
-
     void createHull() {
         // Create a Concave Hull representation of the projected inliers
         pcl::ConvexHull<MyPoint> hull;
@@ -240,28 +238,45 @@ public:
         d_ = coefficients(3);
     }
 
-private:
-    void calculateNormalForm() {
-        normal_ = Eigen::Vector3f(a_, b_, c_);
-        float length = normal_.norm();
-        normal_ = normal_ / length;
-        point_ = -d_/length * normal_;
-    }
-    
-    void calculateParameterForm() {
-	a_ = normal_[0];
-	b_ = normal_[1];
-	c_ = normal_[2];
-	
-	d_ = - normal_.dot(point_);
+    void transform(const Eigen::Matrix4f &transform) {
+        Eigen::Vector3f normal;
+        Eigen::Vector3f point;
+        calculateNormalForm(point, normal);
+        Eigen::Vector4f normal_hom(normal[0], normal[1], normal[2], 0);
+        Eigen::Vector4f point_hom(point[0], point[1], point[2], 1);
+        normal_hom = transform * normal_hom;
+        point_hom = transform * point_hom;
+        for (int i = 0; i < 3; i++) {
+            normal[i] = normal_hom[i];
+            point[i] = point_hom[i];
+        }
+        calculateParameterForm(point, normal);
     }
 
-    
+
+
+private:
+    void calculateNormalForm(Eigen::Vector3f &point_out, Eigen::Vector3f &normal_out) {
+        normal_out = Eigen::Vector3f(a_, b_, c_);
+        float length = normal_out.norm();
+        normal_out = normal_out / length;
+        point_out = -d_/length * normal_out;
+    }
+
+    void calculateParameterForm(const Eigen::Vector3f &point, const Eigen::Vector3f &normal) {
+        a_ = normal[0];
+        b_ = normal[1];
+        c_ = normal[2];
+
+        d_ = - normal.dot(point);
+    }
+
+
 // Member variables ----------
 private:
     float a_, b_, c_, d_;
-    Eigen::Vector3f normal_;
-    Eigen::Vector3f point_;
+
+
 
 };
 

@@ -99,27 +99,24 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
         if(stickToSurface_ == true) {
 
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
-            Sophus::Sim3f pose;
 
-            processPointcloud(msg, cloud, pose);
+            processPointcloud(msg, cloud);
 
             //Find the largest plane only if no plane exists
             if(!planeExists_) {
-
                 std::cout << "Searching largest plane" << std::endl;
-                findPlanes(cloud, pose, 1);
-            }
-
-            // Refine the largest plane with new inliers
-            refinePlane(cloud);
-
+                findPlanes(cloud, 1);
+            } else {
+		// Refine the largest plane with new inliers
+		refinePlane(cloud);
+	    }
 
             //publish plane
-            publishPlane(pose);
+            publishPlane();
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
-
+	    last_pose_ = current_pose_;
         }
 
     } else {
@@ -133,8 +130,8 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 
 }
 
-void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud, Sophus::Sim3f &pose) {
-    memcpy(pose.data(), msg->camToWorld.data(), 7*sizeof(float));
+void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud) {
+    memcpy(current_pose_.data(), msg->camToWorld.data(), 7*sizeof(float));
 
     float fxi = 1.0/msg->fx;
     float fyi = 1.0/msg->fy;
@@ -164,7 +161,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     Eigen::Vector2i min, max;
     getProcessWindow(min, max, width, height);
 
-    float worldScale = pose.scale();
+    float worldScale = current_pose_.scale();
 
     cloud->resize(width*height);
     int numPoints = 0;
@@ -220,7 +217,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
     } // y
     // refit pointcloud and search for planes
     cloud->resize(numPoints);
-    //pcl::transformPointCloud(*cloud,*cloud,pose.matrix());
+    //pcl::transformPointCloud(*cloud,*cloud,current_pose_.matrix());
 
     delete[] originalInput_;
 }
@@ -244,6 +241,8 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
 
     Eigen::VectorXf coefficients, coefficients_refined;
     //TODO transform plane into new frame
+    Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
+    //plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
     // Find inliers to the best plane, and  refit the plane with new points only, if enough points were found.
@@ -280,7 +279,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
  * looks for num_planes planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
  */
-void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, const Sophus::Sim3f &pose, unsigned int num_planes) {
+void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes) {
 
     // Init
     MyPointcloud::Ptr cloud_cropped = cloud;
@@ -427,12 +426,12 @@ void PcMeshBuilder::publishPolygons() {
 //     pub_markers_.publish(markers);
 }
 
-void PcMeshBuilder::publishPlane(const Sophus::Sim3f &pose) {
+void PcMeshBuilder::publishPlane() {
 
     // calculate Plane position
     Eigen::VectorXf coeff = plane_->getCoefficients();
     Plane plane(coeff[0], coeff[1], coeff[2], coeff[3]);
-    Eigen::Vector3f cam_t(0,0,0);// = pose.translation();
+    Eigen::Vector3f cam_t(0,0,0);
     Eigen::Vector3f plane_point, plane_normal;
     plane.getNormalForm(plane_point, plane_normal);
     Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
