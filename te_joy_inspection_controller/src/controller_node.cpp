@@ -5,7 +5,7 @@
 
 Controller::Controller() :
     speedX_(1.05f), speedY_(1.05f), speedZ_(1.05f), speedYaw_(1.01f), goal_reached_(true),
-    stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f) {
+    search_for_plane_(false), stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f) {
 
     std::cout << "Controller node started..." << std::endl;
 
@@ -118,18 +118,19 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     transform_.setRotation(q);
 
     /// buttons
+    // tell PcMeshBuilder to search for a plane
+    if(joy->buttons[PS3_BUTTON_ACTION_CROSS]) {
+        search_for_plane_ = !search_for_plane_;
+        std_msgs::Bool sticking;
+        sticking.data = search_for_plane_;
+        pub_stickToSurface_.publish(sticking);
+    }
     // enable or disable sticking to the plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1]) {
         stick_to_plane_ = true;
-        std_msgs::Bool sticking;
-        sticking.data = stick_to_plane_;
-        pub_stickToSurface_.publish(sticking);
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_1]) {
         stick_to_plane_ = false;
-        std_msgs::Bool sticking;
-        sticking.data = stick_to_plane_;
-        pub_stickToSurface_.publish(sticking);
     }
     // sticking distance
     if(joy->buttons[PS3_BUTTON_CROSS_UP] && sticking_distance_ > 0.05f) {
