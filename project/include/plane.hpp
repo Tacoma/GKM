@@ -140,18 +140,14 @@ public:
 
 private:
 
-    void calculateNormalForm(Eigen::Vector3f &point, Eigen::Vector3f &normal) {
-        normal = Eigen::Vector3f(a_, b_, c_);
-        float length = normal.norm();
-        normal = normal / length;
-        point = -d_/length*normal;
-
-        //if (a_ != 0.0f && b_ != 0.0f && c_ != 0.0f) {
-        //    //point = Eigen::Vector3f(-d_/(3*a_),-d_/(3*b_),-d_/(3*c_));
-        //} else {
-        //    point = Eigen::Vector3f(0,0,0);
-        //}
+    void calculateNormalForm(Eigen::Vector3f &point_out, Eigen::Vector3f &normal_out) {
+        normal_out = Eigen::Vector3f(a_, b_, c_);
+        float length = normal_out.norm();
+        normal_out = normal_out / length;
+        point_out = -d_/length * normal_out;
     }
+
+    void calculateParameterForm(Eigen::Vector3f &normal, Eigen::Vector3f
 
     void createHull() {
         // Create a Concave Hull representation of the projected inliers
@@ -244,9 +240,28 @@ public:
         d_ = coefficients(3);
     }
 
+private:
+    void calculateNormalForm() {
+        normal_ = Eigen::Vector3f(a_, b_, c_);
+        float length = normal_.norm();
+        normal_ = normal_ / length;
+        point_ = -d_/length * normal_;
+    }
+    
+    void calculateParameterForm() {
+	a_ = normal_[0];
+	b_ = normal_[1];
+	c_ = normal_[2];
+	
+	d_ = - normal_.dot(point_);
+    }
 
+    
+// Member variables ----------
 private:
     float a_, b_, c_, d_;
+    Eigen::Vector3f normal_;
+    Eigen::Vector3f point_;
 
 };
 
