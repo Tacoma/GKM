@@ -74,6 +74,7 @@ private:
     ros::Subscriber sub_mocap_pose_;
     ros::Subscriber sub_plane_tf_;
     ros::Publisher pub_pose_;
+    ros::Publisher pub_stickToSurface_;
     tf::TransformBroadcaster br_tf_;
 
     sensor_msgs::Joy::ConstPtr prev_msg_;
