@@ -213,5 +213,42 @@ private:
     MyPointcloud::Ptr hull_;
 };
 
+class SimplePlane {
+
+public:
+    typedef boost::shared_ptr<SimplePlane> Ptr;
+
+    SimplePlane(std::vector<float> coefficients) {
+        if (coefficients.size() != 4) {
+            ROS_ERROR("Plane with wrong number of coefficients created");
+        }
+        a_ = coefficients[0];
+        b_ = coefficients[1];
+        c_ = coefficients[2];
+        d_ = coefficients[3];
+    }
+
+    Eigen::VectorXf getCoefficients() {
+        Eigen::VectorXf coeff(4);
+        coeff << a_ , b_ , c_ , d_;
+        return coeff;
+    }
+
+    void setCoefficients(const Eigen::VectorXf coefficients) {
+        if (coefficients.size() != 4) {
+            return;
+        }
+        a_ = coefficients(0);
+        b_ = coefficients(1);
+        c_ = coefficients(2);
+        d_ = coefficients(3);
+    }
+
+
+private:
+    float a_, b_, c_, d_;
+
+};
+
 
 #endif //PLANE_H

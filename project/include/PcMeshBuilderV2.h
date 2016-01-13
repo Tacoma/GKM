@@ -20,6 +20,8 @@
 #include "sophus/sim3.hpp"
 #include "plane.hpp"
 
+//#define VISUALIZE // debug visualization
+
 struct InputPointDense
 {
     float idepth;
@@ -51,25 +53,29 @@ public:
     void configCallback(project::projectConfig &config, uint32_t level);
 
 private:
+    // ROS
     ros::NodeHandle nh_;
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
     ros::Publisher pub_markers_;
     ros::Publisher pub_tf_;	// publish wall position
-    dynamic_reconfigure::Server<project::projectConfig> server_;
+    
 
+#ifdef VISUALIZE
     MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
+#endif
     MyPointcloud::Ptr pointcloud_debug_;
     
+    // Planes
     std::vector<Plane::Ptr> planes_;
-    
-
-    unsigned int last_frame_id_;
-    lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
+    SimplePlane::Ptr plane_;
+    bool stickToSurface_;
+    bool planeExists_;
 
     // Parameters
+    dynamic_reconfigure::Server<project::projectConfig> server_;
     float scaledDepthVarTH_;
     float absDepthVarTH_;
     int minNearSupport_;
@@ -82,12 +88,12 @@ private:
     float noisePercentage_;
     int maxPlanesPerCloud_;
     
-    
+    // Stuff
     int nextColor_;
+    lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
+    unsigned int last_frame_id_;
 
-    std::vector<Eigen::VectorXf> coefficients_;
-    bool stickToSurface_;
-    bool planeExists_;
+
 };
 
 #endif // PC_MESH_BUILDER_H
