@@ -456,6 +456,15 @@ void PcMeshBuilder::publishPlane() {
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
     pub_tf_.publish(tf);
+
+    // rviz debug
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+    transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
+    transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "intersection"));
+    transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "point"));
 }
 
 
