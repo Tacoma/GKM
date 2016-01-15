@@ -261,7 +261,7 @@ public:
         point_hom = transform * point_hom;
         for (int i = 0; i < 3; i++) {
             normal[i] = normal_hom[i];
-            point[i] = point_hom[i];
+            point[i] = point_hom[i] / point_hom[3];
         }
         calculateParameterForm(point, normal);
     }
@@ -273,7 +273,7 @@ public:
         point_hom = transform * point_hom;
         for (int i = 0; i < 3; i++) {
             normal_inout[i] = normal_hom[i];
-            point_inout[i] = point_hom[i];
+            point_inout[i] = point_hom[i] / point_hom[3];
         }
     }
 

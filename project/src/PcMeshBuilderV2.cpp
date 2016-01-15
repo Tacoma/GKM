@@ -52,9 +52,9 @@ PcMeshBuilder::PcMeshBuilder()
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
     planeExists_ = false;
-    point_ = Eigen::Vector3f(0,0,0.01);
+    point_ = Eigen::Vector3f(0,0,0);
     normal_ = Eigen::Vector3f(0,0,1);
-    stickToSurface_ = false;
+    searchPlane_ = false;
     planeExists_ = false;
 
     // Setting up Dynamic Reconfiguration
@@ -80,7 +80,7 @@ void PcMeshBuilder::reset() {
 
     planes_.clear();
     plane_.reset();
-    stickToSurface_ = false;
+    searchPlane_ = false;
     planeExists_ = false;
 
     last_frame_id_ = 0;
@@ -88,12 +88,9 @@ void PcMeshBuilder::reset() {
 
 
 void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
-    bool temp = stickToSurface_;
-    stickToSurface_ = msg->data;
-    if (temp != stickToSurface_) {
-        planeExists_ = false; // resetting the plane.
-        pointcloud_debug_ = boost::make_shared<MyPointcloud>();
-    }
+    searchPlane_ = msg->data;
+    planeExists_ = false; // resetting the plane.
+    pointcloud_debug_ = boost::make_shared<MyPointcloud>();
 }
 
 
@@ -102,7 +99,7 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
     if (msg->isKeyframe) {
         last_msg_ = msg;
 
-        if(stickToSurface_ == true) {
+        if(searchPlane_) {
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
             processPointcloud(msg, cloud);
 
@@ -110,13 +107,17 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
             if(!planeExists_) {
                 std::cout << "Searching largest plane" << std::endl;
                 findPlanes(cloud, 1);
-            } else {
+            }
+            
+            // planeExists changes during findPlanes()
+            if (planeExists_) {
                 // Refine the largest plane with new inliers
                 refinePlane(cloud);
-            }
-
-            //publish plane
-            publishPlane();
+		
+		//publish plane
+		publishPlane();
+	    }
+	    publishDebug();
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
@@ -244,11 +245,9 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     //Plane::Ptr plane;
 
     Eigen::VectorXf coefficients, coefficients_refined;
-    //TODO transform plane into new frame
     Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
 
-    plane_->transformPlane(transform, point_, normal_);
-
+    plane_->transformPlane(transform, point_, normal_); //debug
     plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
@@ -465,12 +464,16 @@ void PcMeshBuilder::publishPlane() {
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "intersection"));
     transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "point"));
+}
 
+void PcMeshBuilder::publishDebug() {
+    
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
     transform.setOrigin( tf::Vector3(point_.x(), point_.y(), point_.z()));
     //plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
-    transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+    transform.setRotation( tf::Quaternion(normal_.x(), normal_.y(), normal_.z(), normal_.w()));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera", "debugPose"));
-    
 }
 
 
