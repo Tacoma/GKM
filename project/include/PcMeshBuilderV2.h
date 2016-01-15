@@ -97,6 +97,9 @@ private:
     unsigned int last_frame_id_;
     Sophus::Sim3f last_pose_;
     Sophus::Sim3f current_pose_;
+    
+    //Debug
+    Eigen::Vector3f point_, normal_;
 
 
 };

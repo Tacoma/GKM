@@ -52,6 +52,10 @@ PcMeshBuilder::PcMeshBuilder()
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
     planeExists_ = false;
+    point_ = Eigen::Vector3f(1,1,1);
+    normal_ = Eigen::Vector3f(0,0,1);
+    stickToSurface_ = false;
+    planeExists_ = false;
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
@@ -73,9 +77,10 @@ void PcMeshBuilder::reset() {
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
-    
+
     planes_.clear();
     plane_.reset();
+    stickToSurface_ = false;
     planeExists_ = false;
 
     last_frame_id_ = 0;
@@ -115,7 +120,7 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
-	    last_pose_ = current_pose_;
+            last_pose_ = current_pose_;
         }
 
     } else {
@@ -241,15 +246,10 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     Eigen::VectorXf coefficients, coefficients_refined;
     //TODO transform plane into new frame
     Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
-    std::cout << std::endl << "Matrix: " << std::endl;
-    for(int i=0; i<4; i++) {
-        for(int j=0; j<4; j++) {
-            std::cout << transform(i,j) << ", ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-    //plane_->transform(transform);
+
+    plane_->transformPlane(transform, point_, normal_);
+
+    plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
     // Find inliers to the best plane, and  refit the plane with new points only, if enough points were found.
@@ -347,7 +347,7 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
 //         plane->addPointcoud(cloud_plane);
 //         plane->color_ = color;
 //         planes_.push_back(plane);
-	plane_.reset(new SimplePlane(coefficients->values));
+        plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
 
@@ -465,6 +465,12 @@ void PcMeshBuilder::publishPlane() {
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "intersection"));
     transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "point"));
+
+    transform.setOrigin( tf::Vector3(point_.x(), point_.y(), point_.z()));
+    //plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
+    transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera", "debugPose"));
+    
 }
 
 
@@ -482,10 +488,10 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     minPointsForEstimation_ = config.minPointsForEstimation;
     noisePercentage_ = 1-config.planarPercentage;
     maxPlanesPerCloud_ = config.maxPlanesPerCloud;
-    if ( stickToSurface_ != config.stickToSurface ) {
-        planeExists_ = false; // Resetting the plane.
-    }
-    stickToSurface_ = config.stickToSurface;
+//     if ( stickToSurface_ != config.stickToSurface ) {
+//         planeExists_ = false; // Resetting the plane.
+//     }
+//     stickToSurface_ = config.stickToSurface;
 
     if (last_msg_) {
         processMessageStickToSurface(last_msg_);

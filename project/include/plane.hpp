@@ -35,7 +35,8 @@ typedef unsigned char uchar;
 //typedef pcl::PointCloud<MyPoint> MyPointcloud;
 
 
-
+// ------------------------- SimplePlane -------------------------
+// deprecated
 class Plane {
 
 public:
@@ -72,11 +73,11 @@ public:
         return intersection;
     }
 
-
     Eigen::Quaternionf getRotation() {
         Eigen::Quaternionf rotation;
         return rotation.FromTwoVectors(Eigen::Vector3f(-1,0,0), normal_);
     }
+
     void getNormalForm(Eigen::Vector3f &point, Eigen::Vector3f &normal) {
         normal = normal_;
         point = point_;
@@ -207,6 +208,9 @@ private:
     MyPointcloud::Ptr hull_;
 };
 
+
+// ------------------------- SimplePlane -------------------------
+
 class SimplePlane {
 
 public:
@@ -238,6 +242,15 @@ public:
         d_ = coefficients(3);
     }
 
+    Eigen::Quaternionf getRotation() {
+        Eigen::Quaternionf rotation;
+	Eigen::Vector3f normal;
+        Eigen::Vector3f point;
+        calculateNormalForm(point, normal);
+        return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), normal);
+    }
+
+    //TODO: test
     void transform(const Eigen::Matrix4f &transform) {
         Eigen::Vector3f normal;
         Eigen::Vector3f point;
@@ -253,15 +266,38 @@ public:
         calculateParameterForm(point, normal);
     }
 
+    void transformPlane(const Eigen::Matrix4f &transform, Eigen::Vector3f &point_inout, Eigen::Vector3f &normal_inout) {
+        Eigen::Vector4f normal_hom(normal_inout[0], normal_inout[1], normal_inout[2], 0);
+        Eigen::Vector4f point_hom(point_inout[0], point_inout[1], point_inout[2], 1);
+        normal_hom = transform * normal_hom;
+        point_hom = transform * point_hom;
+        for (int i = 0; i < 3; i++) {
+            normal_inout[i] = normal_hom[i];
+            point_inout[i] = point_hom[i];
+        }
+    }
 
+    Eigen::Vector3f rayIntersection(Eigen::Vector3f point, Eigen::Vector3f direction) {
+        direction.normalize();
+        Eigen::Vector3f planeNormal;
+        Eigen::Vector3f planePoint;
+        calculateNormalForm(planePoint, planeNormal);
+        EigenPlane plane = EigenPlane(planeNormal, planePoint);
+        Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(point, direction);
+        Eigen::Vector3f intersection = pline.intersectionPoint(plane);
+        return intersection;
+    }
 
-private:
     void calculateNormalForm(Eigen::Vector3f &point_out, Eigen::Vector3f &normal_out) {
         normal_out = Eigen::Vector3f(a_, b_, c_);
         float length = normal_out.norm();
         normal_out = normal_out / length;
         point_out = -d_/length * normal_out;
     }
+
+
+
+private:
 
     void calculateParameterForm(const Eigen::Vector3f &point, const Eigen::Vector3f &normal) {
         a_ = normal[0];
@@ -275,7 +311,6 @@ private:
 // Member variables ----------
 private:
     float a_, b_, c_, d_;
-
 
 
 };
