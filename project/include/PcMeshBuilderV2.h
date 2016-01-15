@@ -46,6 +46,7 @@ public:
     void publishPointclouds();
     void publishPolygons();
     void publishPlane();
+    void publishDebug();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
@@ -74,7 +75,7 @@ private:
     // Planes
     std::vector<Plane::Ptr> planes_;
     SimplePlane::Ptr plane_;
-    bool stickToSurface_;
+    bool searchPlane_;
     bool planeExists_;
 
     // Parameters
