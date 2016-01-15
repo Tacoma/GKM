@@ -52,7 +52,7 @@ PcMeshBuilder::PcMeshBuilder()
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
     planeExists_ = false;
-    point_ = Eigen::Vector3f(1,1,1);
+    point_ = Eigen::Vector3f(0,0,0.01);
     normal_ = Eigen::Vector3f(0,0,1);
     stickToSurface_ = false;
     planeExists_ = false;
