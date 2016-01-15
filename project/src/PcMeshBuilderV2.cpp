@@ -52,7 +52,7 @@ PcMeshBuilder::PcMeshBuilder()
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
     planeExists_ = false;
-    point_ = Eigen::Vector3f(0,0,0.01);
+    point_ = Eigen::Vector3f(0,0,0);
     normal_ = Eigen::Vector3f(0,0,1);
     searchPlane_ = false;
     planeExists_ = false;
@@ -245,11 +245,9 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     //Plane::Ptr plane;
 
     Eigen::VectorXf coefficients, coefficients_refined;
-    //TODO transform plane into new frame
     Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
 
-    plane_->transformPlane(transform, point_, normal_);
-
+    plane_->transformPlane(transform, point_, normal_); //debug
     plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
