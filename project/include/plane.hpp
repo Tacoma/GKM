@@ -244,7 +244,7 @@ public:
 
     Eigen::Quaternionf getRotation() {
         Eigen::Quaternionf rotation;
-	Eigen::Vector3f normal;
+    Eigen::Vector3f normal;
         Eigen::Vector3f point;
         calculateNormalForm(point, normal);
         return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), normal);

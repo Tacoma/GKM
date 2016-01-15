@@ -50,6 +50,24 @@ Controller::Controller() :
     // init snap_goal_tf
     snap_goal_tf_.setOrigin(tf::Vector3(0,0,0));
     snap_goal_tf_.setRotation(q);
+
+    // set sensor offset tf by getting the relative offset
+//    tf::TransformListener listener;
+//    try {
+//        listener.lookupTransform("euroc_hex/ground_truth", "euroc_hex/vi_sensor/ground_truth", ros::Time(0), sensor_offset_tf_);
+//    } catch (tf::TransformException ex) {
+//        ROS_ERROR("%s",ex.what());
+//    }
+
+    // hack
+    tf::Transform ground_truth;
+    ground_truth.setOrigin(tf::Vector3(0,0,0.117));
+    ground_truth.setRotation(tf::Quaternion(0,0,0,1));
+    tf::Transform vi_sensor_ground_truth;
+    vi_sensor_ground_truth.setOrigin(tf::Vector3(0.133,0,0.0605));
+    vi_sensor_ground_truth.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
+    sensor_offset_tf_ = vi_sensor_ground_truth * ground_truth.inverse();
+    sensor_offset_tf_ = sensor_offset_tf_.inverse();
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
@@ -129,7 +147,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
         pub_stickToSurface_.publish(sticking);
     }
     // enable or disable sticking to the plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2] && search_for_plane_) {
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
         stick_to_plane_ = true;
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
@@ -157,15 +175,33 @@ void Controller::takeoffAndHover() {
 }
 
 // TODO add constant offset transform for camera
+// TODO improve handedness correction
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
     // realtive plane transform to mav
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 
+    // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_relative") );
+
+    // plane forward is z should be x, hack to fix it for testing
+    tf::Quaternion correction_rot;
+    correction_rot.setRPY(M_PI/2.0,0,M_PI/2.0);
+    plane_tf_.setOrigin(tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin());
+    plane_tf_.setRotation(correction_rot*plane_tf_.getRotation());
+
+    // correct the relative camera offset
+    plane_tf_ = sensor_offset_tf_*plane_tf_;
+    // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_offset") );
+
     // transform into global coordinates
-    plane_tf_ = plane_tf_*mocap_tf_;
+    plane_tf_ = mocap_tf_*plane_tf_;
+    // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_global") );
 }
 
+// TODO remove hacks enhance methods
 void Controller::testPlanes() {
     //// mav
     // predicted mav tf
@@ -195,9 +231,13 @@ void Controller::testPlanes() {
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
 
+    // another hack
+    tf::Quaternion correction_rot;
+    correction_rot.setRPY(0,0,M_PI);
+
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    snap_goal_tf_.setRotation(plane_tf_.getRotation());
+    snap_goal_tf_.setRotation(correction_rot*plane_tf_.getRotation());
 }
 
 
