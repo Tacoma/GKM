@@ -293,6 +293,13 @@ public:
         float length = normal_out.norm();
         normal_out = normal_out / length;
         point_out = -d_/length * normal_out;
+
+        // Checking the direction of the normal
+        int scalerProduct = point_out.dot(normal_out);
+        if(scalerProduct < 0){
+            normal_out = -normal_out;
+        }
+
     }
 
 
