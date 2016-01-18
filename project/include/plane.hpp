@@ -303,7 +303,6 @@ public:
     }
 
 
-
 private:
 
     void calculateParameterForm(const Eigen::Vector3f &point, const Eigen::Vector3f &normal) {

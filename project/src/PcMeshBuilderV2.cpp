@@ -105,7 +105,6 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 
             //Find the largest plane only if no plane exists
             if(!planeExists_) {
-                std::cout << "Searching largest plane" << std::endl;
                 findPlanes(cloud, 1);
             }
             
@@ -229,7 +228,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 
 
 void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
-    std::cout << "Refining Plane coefficients...";
+    std::cout << "Refining Plane...";
 
     // Init
     MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
@@ -261,9 +260,9 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
         if(coefficients_refined.size() == 4) {
             model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers); //TODO: rm debug code
             plane_->setCoefficients(coefficients_refined);
-            std::cout << " Found refined plane.";
+            std::cout << "Ok.";
         } else {
-            std::cout << " Can not find a refinement!";
+            std::cout << " Could not find a refinement!";
         }
     } else {
         std::cout << " Not enough points!";
@@ -275,8 +274,8 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     extract.setNegative(false);
     extract.filter(*cloud_filtered);
     *pointcloud_debug_ = *cloud_filtered;
-
     std::cout << std::endl;
+
 }
 
 
@@ -286,7 +285,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
  * colored to the corresponding plane.
  */
 void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes) {
-
+    std::cout << "Searching " << num_planes << " plane(s) in " << cloud->size() << " points.";
     // Init
     MyPointcloud::Ptr cloud_cropped = cloud;
     int size = cloud->size();
@@ -342,15 +341,12 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
         cloud_cropped.swap(cloud_filtered);
 
         // Create plane and add points
-//         Plane::Ptr plane = boost::make_shared<Plane>(coefficients->values);
-//         plane->addPointcoud(cloud_plane);
-//         plane->color_ = color;
-//         planes_.push_back(plane);
+	std::cout << i << "th plane found";
         plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
-
     }
+    std::cout << std::endl;
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
@@ -433,7 +429,6 @@ void PcMeshBuilder::publishPolygons() {
 }
 
 void PcMeshBuilder::publishPlane() {
-
     // calculate Plane position
     Eigen::VectorXf coeff = plane_->getCoefficients();
     Plane plane(coeff[0], coeff[1], coeff[2], coeff[3]);
@@ -467,19 +462,18 @@ void PcMeshBuilder::publishPlane() {
 }
 
 void PcMeshBuilder::publishDebug() {
-    
     static tf::TransformBroadcaster br;
     tf::Transform transform;
     transform.setOrigin( tf::Vector3(point_.x(), point_.y(), point_.z()));
-    //plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
-    transform.setRotation( tf::Quaternion(normal_.x(), normal_.y(), normal_.z(), normal_.w()));
+    Eigen::Quaternionf plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), normal_);
+    transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera", "debugPose"));
 }
 
 
 void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level) {
 
-    std::cout << "Configurating..." << std::endl;
+    std::cout << "Configurating." << std::endl;
 
     scaledDepthVarTH_ = pow(10.0f , config.scaledDepthVarTH );
     absDepthVarTH_ = pow(10.0f, config.absDepthVarTH);
