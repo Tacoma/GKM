@@ -73,7 +73,6 @@ private:
     MyPointcloud::Ptr pointcloud_debug_;
     
     // Planes
-    std::vector<Plane::Ptr> planes_;
     SimplePlane::Ptr plane_;
     bool searchPlane_;
     bool planeExists_;

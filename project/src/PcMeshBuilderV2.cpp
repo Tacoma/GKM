@@ -51,7 +51,6 @@ PcMeshBuilder::PcMeshBuilder()
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
-    planeExists_ = false;
     point_ = Eigen::Vector3f(0,0,0);
     normal_ = Eigen::Vector3f(0,0,1);
     searchPlane_ = false;
@@ -78,7 +77,6 @@ void PcMeshBuilder::reset() {
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
 
-    planes_.clear();
     plane_.reset();
     searchPlane_ = false;
     planeExists_ = false;
@@ -88,6 +86,7 @@ void PcMeshBuilder::reset() {
 
 
 void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
+    if (searchPlane_ == msg->data) { return; } //
     searchPlane_ = msg->data;
     planeExists_ = false; // resetting the plane.
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
@@ -341,10 +340,10 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
         cloud_cropped.swap(cloud_filtered);
 
         // Create plane and add points
-	std::cout << i << "th plane found";
         plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
+	std::cout << "| "<< i << "th plane found";
     }
     std::cout << std::endl;
 
@@ -389,10 +388,6 @@ void PcMeshBuilder::publishPointclouds() {
 #ifdef VISUALIZE
     *union_cloud += *pointcloud_planar_;
     *union_cloud += *pointcloud_non_planar_;
-
-    for (int i=0; i<planes_.size(); i++) {
-        *union_cloud += *(planes_[i]->getPointcloud());
-    }
 #endif
 
     *union_cloud += *pointcloud_debug_;
@@ -401,7 +396,7 @@ void PcMeshBuilder::publishPointclouds() {
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
     pcl::toROSMsg(*union_cloud, *msg);
     msg->header.stamp = ros::Time::now();
-    msg->header.frame_id = "world";
+    msg->header.frame_id = "euroc_hex/vi_sensor/ground_truth";
     pub_pc_.publish(msg);
 }
 
@@ -430,13 +425,11 @@ void PcMeshBuilder::publishPolygons() {
 
 void PcMeshBuilder::publishPlane() {
     // calculate Plane position
-    Eigen::VectorXf coeff = plane_->getCoefficients();
-    Plane plane(coeff[0], coeff[1], coeff[2], coeff[3]);
     Eigen::Vector3f cam_t(0,0,0);
     Eigen::Vector3f plane_point, plane_normal;
-    plane.getNormalForm(plane_point, plane_normal);
-    Eigen::Vector3f intersection = plane.rayIntersection(cam_t, plane_normal);
-    Eigen::Quaternionf plane_rot = plane.getRotation();
+    plane_->calculateNormalForm(plane_point, plane_normal);
+    Eigen::Vector3f intersection = plane_->rayIntersection(cam_t, plane_normal);
+    Eigen::Quaternionf plane_rot = plane_->getRotation();
 
     // publish
     geometry_msgs::TransformStamped tf;
@@ -456,7 +449,7 @@ void PcMeshBuilder::publishPlane() {
     tf::Transform transform;
     transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z() ));
     transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
-    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "intersection"));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "Intersection"));
     transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z() ));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "point"));
 }
@@ -485,10 +478,6 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
     minPointsForEstimation_ = config.minPointsForEstimation;
     noisePercentage_ = 1-config.planarPercentage;
     maxPlanesPerCloud_ = config.maxPlanesPerCloud;
-//     if ( stickToSurface_ != config.stickToSurface ) {
-//         planeExists_ = false; // Resetting the plane.
-//     }
-//     stickToSurface_ = config.stickToSurface;
 
     if (last_msg_) {
         processMessageStickToSurface(last_msg_);
