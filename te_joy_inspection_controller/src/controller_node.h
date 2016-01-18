@@ -77,9 +77,9 @@ private:
     ros::Publisher pub_stickToSurface_;
     tf::TransformBroadcaster br_tf_;
 
-    tf::Transform sensor_offset_tf_;
+    tf::Transform sensorToMav_;
 
-    tf::Transform mocap_tf_;
+    tf::Transform mavToWorld_;
     tf::Transform transform_;
 
     bool goal_reached_;
