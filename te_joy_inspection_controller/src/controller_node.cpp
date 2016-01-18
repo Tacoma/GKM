@@ -29,8 +29,8 @@ Controller::Controller() :
     q.setRPY(0,0,0);
 
     // init mocap_tf
-    mocap_tf_.setOrigin( tf::Vector3(0,0,0) );
-    mocap_tf_.setRotation(q);
+    mavToWorld_.setOrigin( tf::Vector3(0,0,0) );
+    mavToWorld_.setRotation(q);
 
     // init transform
     transform_.setOrigin( tf::Vector3(0,0,0) );
@@ -60,22 +60,21 @@ Controller::Controller() :
 //    }
 
     // hack
-    tf::Transform ground_truth;
-    ground_truth.setOrigin(tf::Vector3(0,0,0.117));
-    ground_truth.setRotation(tf::Quaternion(0,0,0,1));
-    tf::Transform vi_sensor_ground_truth;
-    vi_sensor_ground_truth.setOrigin(tf::Vector3(0.133,0,0.0605));
-    vi_sensor_ground_truth.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
-    sensor_offset_tf_ = vi_sensor_ground_truth * ground_truth.inverse();
-    sensor_offset_tf_ = sensor_offset_tf_.inverse();
+    tf::Transform mavToWorld;
+    mavToWorld.setOrigin(tf::Vector3(0,0,0.117));
+    mavToWorld.setRotation(tf::Quaternion(0,0,0,1));
+    tf::Transform sensorToWorld;
+    sensorToWorld.setOrigin(tf::Vector3(0.133,0,0.0605));
+    sensorToWorld.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
+    sensorToMav_ = mavToWorld.inverse() * sensorToWorld;
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
-    mocap_tf_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
-    mocap_tf_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
+    mavToWorld_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
+    mavToWorld_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
     if(!goal_reached_) {
-        tf::Transform diff = mocap_tf_.inverse() * hover_goal_tf_;
+        tf::Transform diff = mavToWorld_.inverse() * hover_goal_tf_;
         if(diff.getOrigin().length() < 0.05f) {
             goal_reached_ = true;
         }
@@ -89,11 +88,11 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     /// stick to plane
     if(stick_to_plane_) {
         testPlanes();
-        tf::Vector3 diff = snap_goal_tf_.getOrigin() - mocap_tf_.getOrigin();
-        curr_transform.setOrigin(mocap_tf_.getOrigin() + correction_speed_*diff);
+        tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
+        curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
         curr_transform.setRotation(snap_goal_tf_.getRotation());
     } else {
-        curr_transform = mocap_tf_ * transform_;
+        curr_transform = mavToWorld_ * transform_;
     }
 
     // convert tf into pose and publish the pose
@@ -167,8 +166,8 @@ void Controller::takeoffAndHover() {
     std_srvs::Empty::Response response;
     ros::service::call("euroc2/takeoff", request, response);
 
-    tf::Vector3 desired_pos = tf::Vector3( mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), 1.0f);
-    tf::Quaternion desired_rot = mocap_tf_.getRotation();
+    tf::Vector3 desired_pos = tf::Vector3( mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), 1.0f);
+    tf::Quaternion desired_rot = mavToWorld_.getRotation();
 
     hover_goal_tf_.setOrigin(desired_pos);
     hover_goal_tf_.setRotation(desired_rot);
@@ -178,34 +177,44 @@ void Controller::takeoffAndHover() {
 // TODO improve handedness correction
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
     // realtive plane transform to mav
+    //planeToCam = plane_tf
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 
+    //plane_tf_.setOrigin( tf::Vector3(0,0,0) ); //TODO rm debug
+    //plane_tf_.setRotation( tf::Quaternion::getIdentity() );
+
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_relative") );
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Cam_World") );
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Cam") );
 
     // plane forward is z should be x, hack to fix it for testing
+    //CamToSensor
     tf::Quaternion correction_rot;
-    correction_rot.setRPY(M_PI/2.0,0,M_PI/2.0);
+//    correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
+    correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
     plane_tf_.setOrigin(tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin());
     plane_tf_.setRotation(correction_rot*plane_tf_.getRotation());
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
 
     // correct the relative camera offset
-    plane_tf_ = sensor_offset_tf_*plane_tf_;
+    // planeToMav = plane_tf CORRECT
+    plane_tf_ = sensorToMav_*plane_tf_;
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_offset") );
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/ground_truth", "plane_Mav") );
 
     // transform into global coordinates
-    plane_tf_ = mocap_tf_*plane_tf_;
+    // planeToWorld = plane_tf_ CORRECT
+    plane_tf_ = mavToWorld_*plane_tf_;
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_global") );
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Global") );
 }
 
 // TODO remove hacks enhance methods
 void Controller::testPlanes() {
     //// mav
     // predicted mav tf
-    tf::Transform mav_tf = mocap_tf_ * transform_;
+    tf::Transform mav_tf = mavToWorld_ * transform_;
 
     // Eigen conversions
     Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
@@ -223,21 +232,22 @@ void Controller::testPlanes() {
     //// calculations
     Eigen::Vector3f normal = plane_rot*forward;
     normal.normalize();
-    normal = -normal;
+//    normal = -normal;
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
-    Eigen::Vector3f curr_pos = Eigen::Vector3f(mocap_tf_.getOrigin().x(), mocap_tf_.getOrigin().y(), mocap_tf_.getOrigin().z());
+    Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
 
     int facing = normal.dot(curr_pos-plane_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
 
     // another hack
-    tf::Quaternion correction_rot;
-    correction_rot.setRPY(0,0,M_PI);
+//    tf::Quaternion correction_rot;
+//    correction_rot.setRPY(0,0,M_PI);
 
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    snap_goal_tf_.setRotation(correction_rot*plane_tf_.getRotation());
+//    snap_goal_tf_.setRotation(correction_rot*plane_tf_.getRotation());
+    snap_goal_tf_.setRotation(plane_tf_.getRotation());
 }
 
 
