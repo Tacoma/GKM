@@ -403,11 +403,6 @@ void PcMeshBuilder::publishPointclouds() {
     *union_cloud += *pointcloud_planar_;
     *union_cloud += *pointcloud_non_planar_;
 #endif
-
-
-
-    
-
     *union_cloud += *pointcloud_debug_;
 
     // Publish
