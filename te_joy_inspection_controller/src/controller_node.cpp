@@ -218,7 +218,7 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
 
     // correct the relative camera offset
     // planeToMav = plane_tf CORRECT
-    plane_tf_ = sensorToMav_.inverse()*plane_tf_;
+    plane_tf_ = sensorToMav_*plane_tf_;
 
     // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Mav_World") );
