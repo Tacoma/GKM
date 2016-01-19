@@ -190,17 +190,38 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
 
     // plane forward is z should be x, hack to fix it for testing
     //CamToSensor
-    tf::Quaternion correction_rot;
-//    correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
-    correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
-    plane_tf_.setOrigin(tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin());
-    plane_tf_.setRotation(correction_rot*plane_tf_.getRotation());
+//    tf::Matrix3x3 tmp_rot = tf::Matrix3x3(0,-1,0,0,0,-1,1,0,0);
+    tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
+    tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
+    tf::Quaternion correction_rot = q2*q1;
+    plane_tf_.setOrigin( tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin() );
+    plane_tf_.setRotation( plane_tf_.getRotation() );
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
+
+    /// testing ///
+////    tf::Quaternion q1; q1.setRPY(0,-M_PI/2.0,0);
+////    tf::Quaternion q2; q2.setRPY(M_PI/2.0,0,0);
+////    tf::Quaternion q3; q3.setRPY(0,0,M_PI);
+//    tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
+//    tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
+//    tf::Quaternion q3; q3.setRPY(0,0,0);
+//    correction_rot = q3*q2*q1;
+//    tf::Transform test0;
+//    test0.setOrigin(tf::Vector3(-0.5,-0.5,1));
+//    test0.setRotation(tf::Quaternion::getIdentity());
+//    br_tf_.sendTransform( tf::StampedTransform(test0, ros::Time::now(), "world", "test0") );
+//    tf::Transform test1;
+//    test1.setOrigin( tf::Matrix3x3(correction_rot)*test0.getOrigin() );
+//    test1.setRotation( test0.getRotation() );
+//    br_tf_.sendTransform( tf::StampedTransform(test1, ros::Time::now(), "world", "test1") );
+    /// end of testing section ///
 
     // correct the relative camera offset
     // planeToMav = plane_tf CORRECT
-    plane_tf_ = sensorToMav_*plane_tf_;
+    plane_tf_ = sensorToMav_.inverse()*plane_tf_;
+
     // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Mav_World") );
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/ground_truth", "plane_Mav") );
 
     // transform into global coordinates
