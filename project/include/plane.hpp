@@ -101,14 +101,15 @@ public:
             point_inout[i] = point_hom[i] / point_hom[3];
         }
     }
-
-    Eigen::Vector3f rayIntersection(Eigen::Vector3f point, Eigen::Vector3f direction) {
-        direction.normalize();
+    
+    // returns closest point to point_in on the plane
+    Eigen::Vector3f rayIntersection(Eigen::Vector3f point_in, Eigen::Vector3f direction_in) {
+        direction_in.normalize();
         Eigen::Vector3f planeNormal;
         Eigen::Vector3f planePoint;
         calculateNormalForm(planePoint, planeNormal);
         EigenPlane plane = EigenPlane(planeNormal, planePoint);
-        Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(point, direction);
+        Eigen::ParametrizedLine<float,3> pline = Eigen::ParametrizedLine<float,3>(point_in, direction_in);
         Eigen::Vector3f intersection = pline.intersectionPoint(plane);
         return intersection;
     }

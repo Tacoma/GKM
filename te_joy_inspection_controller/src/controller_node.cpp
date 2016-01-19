@@ -193,6 +193,9 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
     tf::Quaternion correction_rot;
 //    correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
     correction_rot.setRPY(M_PI/2.0,-M_PI/2.0,0);
+    tf::Matrix3x3 test(correction_rot);
+    ROS_INFO_STREAM_ONCE("HELLOOO");
+    ROS_INFO_STREAM_ONCE(test.[0].x() << ", " << test[0].y() << ", " << test[0].z()  << ",\n " << test[1].x() << ", " << test[1].y() << ", " << test[1].z() << ",\n " << test[2].x() << ", " << test[2].y() << ", " << test[2].z());
     plane_tf_.setOrigin(tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin());
     plane_tf_.setRotation(correction_rot*plane_tf_.getRotation());
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
