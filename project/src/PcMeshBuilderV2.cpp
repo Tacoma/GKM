@@ -86,7 +86,9 @@ void PcMeshBuilder::reset() {
 
 
 void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
-    if (searchPlane_ == msg->data) { return; } //
+    if (searchPlane_ == msg->data) {
+        return;    //
+    }
     searchPlane_ = msg->data;
     planeExists_ = false; // resetting the plane.
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
@@ -106,16 +108,16 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
             if(!planeExists_) {
                 findPlanes(cloud, 1);
             }
-            
+
             // planeExists changes during findPlanes()
             if (planeExists_) {
                 // Refine the largest plane with new inliers
                 refinePlane(cloud);
-		
-		//publish plane
-		publishPlane();
-	    }
-	    publishDebug();
+
+                //publish plane
+                publishPlane();
+            }
+            publishDebug();
 
             // add to vector and accumulated pointcloud
             publishPointclouds();
@@ -343,7 +345,7 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
         plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
-	std::cout << "| "<< i << "th plane found";
+        std::cout << "| "<< i << "th plane found";
     }
     std::cout << std::endl;
 
@@ -391,6 +393,17 @@ void PcMeshBuilder::publishPointclouds() {
 #endif
 
     *union_cloud += *pointcloud_debug_;
+    Eigen::AngleAxisf rollAngle(M_PI/2.0, Eigen::Vector3f::UnitZ());
+    Eigen::AngleAxisf yawAngle(0, Eigen::Vector3f::UnitY());
+    Eigen::AngleAxisf pitchAngle(-M_PI/2.0, Eigen::Vector3f::UnitX());
+
+    Eigen::Quaternionf q = yawAngle * pitchAngle * rollAngle;
+
+    Eigen::Matrix4f rotationMatrix = q.matrix();
+    
+    
+
+    pcl::transformPointCloud(*union_cloud, *union_cloud, rotationMatrix);
 
     // Publish
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
