@@ -30,30 +30,38 @@ struct InputPointDense
     uchar color[4];
 };
 
-
+// ------------------------- PcMeshBuilder -------------------------
 class PcMeshBuilder {
+// --------------- functions ---------------
 public:
     PcMeshBuilder();
     ~PcMeshBuilder();
 
-//    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+private:
     void setStickToSurface(const std_msgs::Bool::ConstPtr& msg);
     void processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
-//    void removeKnownPlanes(MyPointcloud::Ptr cloud);
+    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud,
+                           Eigen::Vector2i min, Eigen::Vector2i max);
     void refinePlane(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes=3);
     void publishPointclouds();
     void publishPolygons();
     void publishPlane();
-    void publishDebug();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
-    inline void getProcessWindow(Eigen::Vector2i &min, Eigen::Vector2i &max, int width, int height);
+    inline void getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out, 
+				 float windowSize, float windowOffset, 
+				 int width, int height);
+    inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
 
     void configCallback(project::projectConfig &config, uint32_t level);
+
+
+// --------------- members ---------------
+public:
 
 private:
     // ROS
@@ -64,15 +72,14 @@ private:
     ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
     ros::Publisher pub_markers_;
     ros::Publisher pub_tf_;	// publish wall position
-    
+
 
 #ifdef VISUALIZE
     MyPointcloud::Ptr pointcloud_planar_;
     MyPointcloud::Ptr pointcloud_non_planar_;
 #endif
     MyPointcloud::Ptr pointcloud_debug_;
-    MyPointcloud::Ptr pointcloud_debug2_;
-    
+
     // Planes
     SimplePlane::Ptr plane_;
     bool searchPlane_;
@@ -87,11 +94,11 @@ private:
     float distanceThreshold_;
     int windowSize_;
     int windowPosY_;
-    
+
     int minPointsForEstimation_;
     float noisePercentage_;
     int maxPlanesPerCloud_;
-    
+
     // Stuff
     int nextColor_;
     lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
@@ -100,10 +107,7 @@ private:
     Sophus::Sim3f current_pose_;
     Eigen::Matrix4f opticalToSensor_;
     
-    //Debug
-    Eigen::Vector3f point_, normal_;
-
-
+    int status;
 };
 
 #endif // PC_MESH_BUILDER_H

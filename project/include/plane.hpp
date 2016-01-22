@@ -35,13 +35,13 @@ typedef unsigned char uchar;
 //typedef pcl::PointCloud<MyPoint> MyPointcloud;
 
 // ------------------------- SimplePlane -------------------------
-
 class SimplePlane {
 
 public:
     typedef boost::shared_ptr<SimplePlane> Ptr;
 
-    SimplePlane(std::vector<float> coefficients) {
+    SimplePlane(std::vector<float> coefficients) 
+    {
         if (coefficients.size() != 4) {
             ROS_ERROR("Plane with wrong number of coefficients created");
         }
@@ -51,13 +51,15 @@ public:
         d_ = coefficients[3];
     }
 
-    Eigen::VectorXf getCoefficients() {
+    Eigen::VectorXf getCoefficients() 
+    {
         Eigen::VectorXf coeff(4);
         coeff << a_ , b_ , c_ , d_;
         return coeff;
     }
 
-    void setCoefficients(const Eigen::VectorXf coefficients) {
+    void setCoefficients(const Eigen::VectorXf coefficients) 
+    {
         if (coefficients.size() != 4) {
             return;
         }
@@ -67,16 +69,16 @@ public:
         d_ = coefficients(3);
     }
 
-    Eigen::Quaternionf getRotation() {
-        Eigen::Quaternionf rotation;
-    Eigen::Vector3f normal;
+    Eigen::Quaternionf getRotation() 
+    {
+	Eigen::Vector3f normal;
         Eigen::Vector3f point;
         calculateNormalForm(point, normal);
-        return rotation.FromTwoVectors(Eigen::Vector3f(0,0,1), normal);
+	return Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), normal);
     }
 
-    //TODO: test
-    void transform(const Eigen::Matrix4f &transform) {
+    void transform(const Eigen::Matrix4f &transform) 
+    {
         Eigen::Vector3f normal;
         Eigen::Vector3f point;
         calculateNormalForm(point, normal);
@@ -91,7 +93,8 @@ public:
         calculateParameterForm(point, normal);
     }
 
-    void transformPlane(const Eigen::Matrix4f &transform, Eigen::Vector3f &point_inout, Eigen::Vector3f &normal_inout) {
+    void transformPlane(const Eigen::Matrix4f &transform, Eigen::Vector3f &point_inout, Eigen::Vector3f &normal_inout) 
+    {
         Eigen::Vector4f normal_hom(normal_inout[0], normal_inout[1], normal_inout[2], 0);
         Eigen::Vector4f point_hom(point_inout[0], point_inout[1], point_inout[2], 1);
         normal_hom = transform * normal_hom;
@@ -103,7 +106,8 @@ public:
     }
     
     // returns closest point to point_in on the plane
-    Eigen::Vector3f rayIntersection(Eigen::Vector3f point_in, Eigen::Vector3f direction_in) {
+    Eigen::Vector3f rayIntersection(Eigen::Vector3f point_in, Eigen::Vector3f direction_in) 
+    {
         direction_in.normalize();
         Eigen::Vector3f planeNormal;
         Eigen::Vector3f planePoint;
@@ -114,7 +118,8 @@ public:
         return intersection;
     }
 
-    void calculateNormalForm(Eigen::Vector3f &point_out, Eigen::Vector3f &normal_out) {
+    void calculateNormalForm(Eigen::Vector3f &point_out, Eigen::Vector3f &normal_out) 
+    {
         normal_out = Eigen::Vector3f(a_, b_, c_);
         float length = normal_out.norm();
         normal_out = normal_out / length;
@@ -143,6 +148,8 @@ private:
 // Member variables ----------
 private:
     float a_, b_, c_, d_;
+    
+    
 
 
 };
