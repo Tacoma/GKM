@@ -51,6 +51,7 @@ PcMeshBuilder::PcMeshBuilder()
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+    pointcloud_debug2_ = boost::make_shared<MyPointcloud>();
     point_ = Eigen::Vector3f(0,0,0);
     normal_ = Eigen::Vector3f(0,0,1);
     searchPlane_ = false;
@@ -81,6 +82,7 @@ void PcMeshBuilder::reset() {
     pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
 #endif
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+    pointcloud_debug2_ = boost::make_shared<MyPointcloud>();
 
     plane_.reset();
     searchPlane_ = false;
@@ -97,6 +99,7 @@ void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg) {
     searchPlane_ = msg->data;
     planeExists_ = false; // resetting the plane.
     pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+    pointcloud_debug2_ = boost::make_shared<MyPointcloud>();
 }
 
 
@@ -284,6 +287,8 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud) {
     
     // transform visualization from optical frame to sensor
     
+    *pointcloud_debug2_ = *cloud_filtered;
+    
     pcl::transformPointCloud(*cloud_filtered, *cloud_filtered, opticalToSensor_);
     
     *pointcloud_debug_ = *cloud_filtered;
@@ -378,7 +383,7 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Ve
 
 inline void PcMeshBuilder::getProcessWindow(Eigen::Vector2i &min, Eigen::Vector2i &max, int width, int height) {
     int radius = windowSize_/2;
-    min.x() = width/2  - radius; // TODO parameterize
+    min.x() = width/2  - radius;
     max.x() = width/2  + radius;
     min.y() = height/2 - radius + windowPosY_;
     max.y() = height/2 + radius + windowPosY_;
@@ -405,12 +410,20 @@ void PcMeshBuilder::publishPointclouds() {
 #endif
     *union_cloud += *pointcloud_debug_;
 
-    // Publish
+    // Publish debug
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
     pcl::toROSMsg(*union_cloud, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = "euroc_hex/vi_sensor/ground_truth";
     pub_pc_.publish(msg);
+    
+    // Publish debug
+    msg = boost::make_shared<sensor_msgs::PointCloud2>();
+    pcl::toROSMsg(*pointcloud_debug2_, *msg);
+    msg->header.stamp = ros::Time::now();
+    msg->header.frame_id = "world";
+    pub_pc_.publish(msg);
+    
 }
 
 void PcMeshBuilder::publishPolygons() {
@@ -442,7 +455,7 @@ void PcMeshBuilder::publishPlane() {
     Eigen::Vector3f plane_point, plane_normal;
     plane_->calculateNormalForm(plane_point, plane_normal);
     Eigen::Vector3f intersection = plane_->rayIntersection(cam_t, plane_normal);
-    Eigen::Quaternionf plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), plane_normal);
+    Eigen::Quaternionf plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), plane_normal);
     
     
 
@@ -453,6 +466,7 @@ void PcMeshBuilder::publishPlane() {
     tf.transform.translation.x = intersection.x();
     tf.transform.translation.y = intersection.y();
     tf.transform.translation.z = intersection.z();
+    tf.transform.rotation.x = plane_rot.x();
     tf.transform.rotation.y = plane_rot.y();
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
@@ -472,12 +486,12 @@ void PcMeshBuilder::publishPlane() {
     transform.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "project/intersection"));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/intersection_sensor"));
-//     transform.setOrigin( tf::Vector3(plane_point4.x() / plane_point4.w(), plane_point4.y() / plane_point4.w(), plane_point4.z() / plane_point4.w() ));
-//     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "project/point"));
-//     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/point_sensor"));
+    transform.setOrigin( tf::Vector3(plane_point4.x() / plane_point4.w(), plane_point4.y() / plane_point4.w(), plane_point4.z() / plane_point4.w() ));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "euroc_hex/ground_truth", "project/point"));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/point_sensor"));
     
-//     transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z()));
-//     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/point_optical"));
+    transform.setOrigin( tf::Vector3(plane_point.x(), plane_point.y(), plane_point.z()));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/point_optical"));
     transform.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z()));
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "project/debug/intersection_optical"));
 }

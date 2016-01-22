@@ -71,6 +71,7 @@ private:
     MyPointcloud::Ptr pointcloud_non_planar_;
 #endif
     MyPointcloud::Ptr pointcloud_debug_;
+    MyPointcloud::Ptr pointcloud_debug2_;
     
     // Planes
     SimplePlane::Ptr plane_;

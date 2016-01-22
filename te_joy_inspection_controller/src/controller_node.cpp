@@ -184,7 +184,7 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
     tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
     tf::Quaternion opticalToSensor = q2*q1;
     plane_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*plane_tf_.getOrigin() );
-    plane_tf_.setRotation( plane_tf_.getRotation() );
+    plane_tf_.setRotation( opticalToSensor*plane_tf_.getRotation() );
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
 
     // correct the relative camera offset
