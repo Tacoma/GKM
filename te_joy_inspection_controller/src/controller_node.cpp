@@ -51,14 +51,6 @@ Controller::Controller() :
     snap_goal_tf_.setOrigin(tf::Vector3(0,0,0));
     snap_goal_tf_.setRotation(q);
 
-    // set sensor offset tf by getting the relative offset
-//    tf::TransformListener listener;
-//    try {
-//        listener.lookupTransform("euroc_hex/ground_truth", "euroc_hex/vi_sensor/ground_truth", ros::Time(0), sensor_offset_tf_);
-//    } catch (tf::TransformException ex) {
-//        ROS_ERROR("%s",ex.what());
-//    }
-
     // hack
     tf::Transform mavToWorld;
     mavToWorld.setOrigin(tf::Vector3(0,0,0.117));
@@ -153,7 +145,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
         stick_to_plane_ = false;
     }
     // sticking distance
-    if(joy->buttons[PS3_BUTTON_CROSS_UP] && sticking_distance_ > 0.05f) {
+    if(joy->buttons[PS3_BUTTON_CROSS_UP] && sticking_distance_ > 0.5f) {
         sticking_distance_ -= 0.005f;
     }
     if(joy->buttons[PS3_BUTTON_CROSS_DOWN]) {
@@ -176,48 +168,27 @@ void Controller::takeoffAndHover() {
 // TODO add constant offset transform for camera
 // TODO improve handedness correction
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
-    // realtive plane transform to mav
-    //planeToCam = plane_tf
+    // realtive plane transform
+    // planeToCam = plane_tf
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
-
-    //plane_tf_.setOrigin( tf::Vector3(0,0,0) ); //TODO rm debug
-    //plane_tf_.setRotation( tf::Quaternion::getIdentity() );
 
     // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Cam_World") );
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Cam") );
 
-    // plane forward is z should be x, hack to fix it for testing
-    //CamToSensor
+    // plane forward is z should be x, conversion of systems
+    // camToSensor
 //    tf::Matrix3x3 tmp_rot = tf::Matrix3x3(0,-1,0,0,0,-1,1,0,0);
     tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
     tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
-    tf::Quaternion correction_rot = q2*q1;
-    plane_tf_.setOrigin( tf::Matrix3x3(correction_rot)*plane_tf_.getOrigin() );
+    tf::Quaternion opticalToSensor = q2*q1;
+    plane_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*plane_tf_.getOrigin() );
     plane_tf_.setRotation( plane_tf_.getRotation() );
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
 
-    /// testing ///
-////    tf::Quaternion q1; q1.setRPY(0,-M_PI/2.0,0);
-////    tf::Quaternion q2; q2.setRPY(M_PI/2.0,0,0);
-////    tf::Quaternion q3; q3.setRPY(0,0,M_PI);
-//    tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
-//    tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
-//    tf::Quaternion q3; q3.setRPY(0,0,0);
-//    correction_rot = q3*q2*q1;
-//    tf::Transform test0;
-//    test0.setOrigin(tf::Vector3(-0.5,-0.5,1));
-//    test0.setRotation(tf::Quaternion::getIdentity());
-//    br_tf_.sendTransform( tf::StampedTransform(test0, ros::Time::now(), "world", "test0") );
-//    tf::Transform test1;
-//    test1.setOrigin( tf::Matrix3x3(correction_rot)*test0.getOrigin() );
-//    test1.setRotation( test0.getRotation() );
-//    br_tf_.sendTransform( tf::StampedTransform(test1, ros::Time::now(), "world", "test1") );
-    /// end of testing section ///
-
     // correct the relative camera offset
-    // planeToMav = plane_tf CORRECT
+    // planeToMav = plane_tf
     plane_tf_ = sensorToMav_*plane_tf_;
 
     // rviz debug
@@ -225,13 +196,17 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/ground_truth", "plane_Mav") );
 
     // transform into global coordinates
-    // planeToWorld = plane_tf_ CORRECT
+    // planeToWorld = plane_tf_
     plane_tf_ = mavToWorld_*plane_tf_;
+
     // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Global") );
+
+    // rviz debug
+    tf::Transform opticalToWorld = mavToWorld_*sensorToMav_*tf::Transform(opticalToSensor);
+    br_tf_.sendTransform( tf::StampedTransform(opticalToWorld, ros::Time::now(), "world", "euroc_hex/vi_optical/ground_truth") );
 }
 
-// TODO remove hacks enhance methods
 void Controller::testPlanes() {
     //// mav
     // predicted mav tf
@@ -253,7 +228,6 @@ void Controller::testPlanes() {
     //// calculations
     Eigen::Vector3f normal = plane_rot*forward;
     normal.normalize();
-//    normal = -normal;
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
 
@@ -261,13 +235,9 @@ void Controller::testPlanes() {
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
 
-    // another hack
-//    tf::Quaternion correction_rot;
-//    correction_rot.setRPY(0,0,M_PI);
 
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-//    snap_goal_tf_.setRotation(correction_rot*plane_tf_.getRotation());
     snap_goal_tf_.setRotation(plane_tf_.getRotation());
 }
 
