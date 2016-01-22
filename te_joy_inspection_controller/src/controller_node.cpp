@@ -4,9 +4,9 @@
 #include <iostream>
 
 Controller::Controller() :
-    speedX_(1.05f), speedY_(1.05f), speedZ_(1.05f), speedYaw_(1.01f), goal_reached_(true),
-    search_for_plane_(false), stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f) {
-
+    speedX_(0.05f), speedY_(0.05f), speedZ_(0.05f), speedYaw_(0.01f), goal_reached_(true),
+    search_for_plane_(false), stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f)
+{
     std::cout << "Controller node started..." << std::endl;
 
     // get Ros parameters and set variables
@@ -61,7 +61,8 @@ Controller::Controller() :
     sensorToMav_ = mavToWorld.inverse() * sensorToWorld;
 }
 
-void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
+{
     mavToWorld_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
     mavToWorld_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
@@ -109,7 +110,8 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     br_tf_.sendTransform( tf::StampedTransform(curr_transform, ros::Time::now(), "world", "controller") );
 }
 
-void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
+void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
+{
     /// translation from controller axis
     float jx = speedX_ * joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS];
     float jy = speedY_ * joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS];
@@ -140,6 +142,15 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     // enable or disable sticking to the plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
         stick_to_plane_ = true;
+
+        // set current distance to surface as sticking distance
+        Eigen::Vector3f plane_pos = Eigen::Vector3f( plane_tf_.getOrigin().x(), plane_tf_.getOrigin().y(), plane_tf_.getOrigin().z() );
+        tf::Quaternion plane_q = plane_tf_.getRotation();
+        Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.w(),plane_q.x(),plane_q.y(),plane_q.z());
+        Eigen::Vector3f normal = plane_rot*forward;
+        normal.normalize();
+        Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
+        sticking_distance_ = normal.dot(curr_pos-plane_pos);
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
         stick_to_plane_ = false;
@@ -153,7 +164,8 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy) {
     }
 }
 
-void Controller::takeoffAndHover() {
+void Controller::takeoffAndHover()
+{
     std_srvs::Empty::Request request;
     std_srvs::Empty::Response response;
     ros::service::call("euroc2/takeoff", request, response);
@@ -165,21 +177,15 @@ void Controller::takeoffAndHover() {
     hover_goal_tf_.setRotation(desired_rot);
 }
 
-// TODO add constant offset transform for camera
-// TODO improve handedness correction
-void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg) {
+void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
+{
     // realtive plane transform
     // planeToCam = plane_tf
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
     plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
 
-    // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Cam_World") );
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Cam") );
-
     // plane forward is z should be x, conversion of systems
     // camToSensor
-//    tf::Matrix3x3 tmp_rot = tf::Matrix3x3(0,-1,0,0,0,-1,1,0,0);
     tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
     tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
     tf::Quaternion opticalToSensor = q2*q1;
@@ -191,23 +197,16 @@ void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr
     // planeToMav = plane_tf
     plane_tf_ = sensorToMav_*plane_tf_;
 
-    // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Mav_World") );
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/ground_truth", "plane_Mav") );
-
     // transform into global coordinates
     // planeToWorld = plane_tf_
     plane_tf_ = mavToWorld_*plane_tf_;
 
     // rviz debug
     br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "plane_Global") );
-
-    // rviz debug
-    tf::Transform opticalToWorld = mavToWorld_*sensorToMav_*tf::Transform(opticalToSensor);
-    br_tf_.sendTransform( tf::StampedTransform(opticalToWorld, ros::Time::now(), "world", "euroc_hex/vi_optical/ground_truth") );
 }
 
-void Controller::testPlanes() {
+void Controller::testPlanes()
+{
     //// mav
     // predicted mav tf
     tf::Transform mav_tf = mavToWorld_ * transform_;
@@ -222,9 +221,6 @@ void Controller::testPlanes() {
     tf::Quaternion plane_q = plane_tf_.getRotation();
     Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.w(),plane_q.x(),plane_q.y(),plane_q.z());
 
-    // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "normal") );
-
     //// calculations
     Eigen::Vector3f normal = plane_rot*forward;
     normal.normalize();
@@ -234,15 +230,11 @@ void Controller::testPlanes() {
     int facing = normal.dot(curr_pos-plane_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
-
-
-    // set snapping goal tf
-    snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    snap_goal_tf_.setRotation(plane_tf_.getRotation());
 }
 
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     ros::init(argc, argv, "te_joy_controller");
     Controller rc;
     ros::spin();
