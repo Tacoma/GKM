@@ -4,7 +4,7 @@
 #include <iostream>
 
 Controller::Controller() :
-    speedX_(0.05f), speedY_(0.05f), speedZ_(0.05f), speedYaw_(0.01f), goal_reached_(true),
+    speedX_(1.05f), speedY_(1.05f), speedZ_(1.05f), speedYaw_(1.01f), goal_reached_(true),
     search_for_plane_(false), stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f)
 {
     std::cout << "Controller node started..." << std::endl;
@@ -230,6 +230,10 @@ void Controller::testPlanes()
     int facing = normal.dot(curr_pos-plane_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
+
+    // set snapping goal tf
+    snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
+    snap_goal_tf_.setRotation(plane_tf_.getRotation());
 }
 
 
