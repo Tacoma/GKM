@@ -150,7 +150,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         Eigen::Vector3f normal = plane_rot*forward;
         normal.normalize();
         Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
-        sticking_distance_ = normal.dot(curr_pos-plane_pos);
+        sticking_distance_ = -normal.dot(curr_pos-plane_pos);
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
         stick_to_plane_ = false;
