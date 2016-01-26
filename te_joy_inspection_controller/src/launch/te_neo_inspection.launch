@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="mav_name" default="euroc2"/>
+  <arg name="namespace" default="$(arg mav_name)" />
+
+  <group ns="$(arg namespace)" >
+    <node name="mav_interface" pkg="ethzasl_mav_interface" type="mav_interface_node"
+      output="screen" respawn="true" clear_params="true">
+      <param name="frame_id" value="fcu" />
+      <rosparam file="$(find euroc_launch)/parameters/$(arg mav_name)/mav_interface.yaml"/>
+      <param name="capability_group" value="Core" />
+    </node>
+
+    <rosparam file="$(find euroc_launch)/parameters/common/visensor.yaml"/>
+    <node name="visensor_node" pkg="visensor_node" type="visensor_node" output="screen">
+      <param name="capability_group" value="Core" />
+    </node>
+
+    <node name="mav_linear_mpc" pkg="mav_linear_mpc" type="mav_linear_mpc_node"  respawn="true" clear_params="true" output="screen">
+      <remap from="odometry" to="msf_core/odometry" />
+      <param name="control_interface/verbose" value="true"/>
+      <rosparam file="$(find euroc_launch)/parameters/common/linear_mpc_neo.yaml"/>
+      <param name="capability_group" value="Core" />
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_tf_broadcaster" args="0 0 0 0 0 0 1 world odom 100">
+      <param name="capability_group" value="Core" />
+    </node>
+
+    <!-- Vicon -->
+    <node name="pose_sensor_vicon" pkg="msf_updates" type="pose_sensor" respawn="true" clear_params="true" output="screen">
+      <remap from="msf_updates/transform_input" to="vrpn_client/estimated_transform" />
+      <remap from="msf_core/imu_state_input" to="imu" />
+      <rosparam file="$(find euroc_launch)/parameters/common/msf_parameters_vicon.yaml"/>
+      <param name="capability_group" value="Vicon" />
+    </node>
+
+    <node name="vrpn_client" type="ros_vrpn_client" pkg="ros_vrpn_client" output="screen">
+      <param name="vrpn_server_ip" value="raspberrypi" />
+      <param name="vrpn_coordinate_system" value="optitrack" />
+      <param name="object_name" value="$(arg mav_name)" />
+      <param name="vicon_estimator/dt" value="0.01" />
+      <param name="translational_estimator/kp" value="1.0" />
+      <param name="translational_estimator/kv" value="10.0" />
+      <param name="rotational_estimator/orientation_estimate_initial_covariance" value="1" />
+      <param name="rotational_estimator/rate_estimate_initial_covariance" value="1" />
+      <param name="rotational_estimator/orientation_process_covariance" value="0.01" />
+      <param name="rotational_estimator/rate_process_covariance" value="1" />
+      <param name="rotational_estimator/orientation_measurementCovariance" value="0.0005" />
+      <param name="capability_group" value="Vicon" />
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="vicon_tf_broadcaster" args="0 0 0 0 0 0 1 world optitrack 120">
+      <param name="capability_group" value="Vicon" />
+    </node>
+
+    <!-- Okvis -->
+    <node name="okvis_node" pkg="okvis_node" type="okvis_node" output="screen">
+      <param name="config_filename" value="$(find euroc_launch)/parameters/$(arg mav_name)/okvis_cameras.yaml" />
+      <remap from="/camera0" to="cam2/image_raw" />
+      <remap from="/camera1" to="cam0/image_raw" />
+      <remap from="/imu" to="imu0" />
+      <param name="capability_group" value="Okvis" />
+    </node>
+
+    <node name="pose_sensor_okvis" pkg="msf_updates" type="pose_sensor" clear_params="true" output="screen">
+      <remap from="msf_core/imu_state_input" to="imu" />
+      <remap from="msf_updates/transform_input" to="okvis_node/okvis_transform" />
+      <rosparam file="$(find euroc_launch)/parameters/$(arg mav_name)/msf_parameters_okvis.yaml"/>
+      <param name="capability_group" value="Okvis" />
+    </node>
+
+    <!-- Rovio -->
+    <node name="rovio" pkg="rovio" type="rovio_node" output="screen">
+      <param name="filter_config" value="$(find euroc_launch)/parameters/common/rovio_filter.info" />
+      <param name="camera0_config" value="$(find euroc_launch)/parameters/$(arg mav_name)/rovio_equidist_cam0.yaml" />
+      <param name="capability_group" value="Rovio" />
+    </node>
+
+    <node name="pose_sensor_rovio" pkg="msf_updates" type="pose_sensor" clear_params="true" output="screen">
+      <remap from="msf_core/hl_state_input" to="fcu/ekf_state_out" />
+      <remap from="msf_core/correction" to="fcu/ekf_state_in" />
+      <remap from="msf_core/imu_state_input" to="imu" />
+      <remap from="msf_updates/transform_input" to="rovio/transform" />
+      <rosparam file="$(find euroc_launch)/parameters/$(arg mav_name)/msf_parameters_okvis.yaml"/>
+      <param name="capability_group" value="Rovio" />
+    </node>
+
+    <!-- S-LSD -->
+    <node name="live_stereo_slam" pkg="lsd_slam_core" type="live_stereo_slam" output="screen" required="true">
+      <rosparam command="load" file="$(find te_eval)/parameters/live_stereo_slam.yaml"/>
+      <param name="~calib" value="$(find te_eval)/parameters/camchain_radtan.yaml" />
+      <remap from="~left/image/compressed" to="/$(arg mav_name)/cam2/image_raw/compressed"/>
+      <remap from="~left/camera_info" to="/$(arg mav_name)/cam2/camera_info"/>
+      <remap from="~right/image/compressed" to="/$(arg mav_name)/cam0/image_raw/compressed"/>
+      <remap from="~right/camera_info" to="/$(arg mav_name)/cam0/camera_info"/>
+      <remap from="pose" to="pose_from_slam"/>
+      <param name="capability_group" value="S-LSD-SLAM"/>
+    </node>
+    <node pkg="lsd_slam_viewer" type="viewer" name="viewer" args="">
+      <param name="capability_group" value="S-LSD-SLAM"/>
+    </node>
+
+    <node name="lsd_adapter" pkg="te_navigation" type="lsd_adapter" output="screen"  required="true">
+      <remap from="pose_in" to="pose_from_slam"/>
+      <remap from="gt_odometry" to="vrpn_client/estimated_odometry" />
+      <remap from="imu" to="/imu"/>
+      <param name="capability_group" value="S-LSD-SLAM"/>
+    </node>
+
+    <node name="pose_sensor_slam" pkg="msf_updates" type="pose_sensor" clear_params="true" output="screen" required="true">
+      <remap from="/$(arg mav_name)/msf_core/imu_state_input" to="imu"/>
+      <remap from="/$(arg mav_name)/msf_updates/transform_input" to="slam_transform"/>
+      <rosparam file="$(find te_simulator_resources)/parameters/msf_parameters_lsd.yaml"/>
+      <param name="capability_group" value="S-LSD-SLAM"/>
+    </node>
+  </group>
+
+  <!-- start plane detection -->
+  <node name="project" pkg="project" type="project">
+  </node>
+
+</launch>

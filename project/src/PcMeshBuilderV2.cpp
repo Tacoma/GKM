@@ -39,12 +39,12 @@ PcMeshBuilder::PcMeshBuilder()
 {
 
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("euroc2/lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
-    pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
+    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
+    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
+    pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("project/meshPc", 10);
     //pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pub_tf_ = nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
+    pub_tf_ = nh_.advertise<geometry_msgs::TransformStamped>("project/plane", 10);
 
     // init
 #ifdef VISUALIZE
