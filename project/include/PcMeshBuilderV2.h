@@ -66,6 +66,8 @@ public:
 private:
     // ROS
     ros::NodeHandle nh_;
+    ros::NodeHandle private_nh_;
+
     ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
     ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
     ros::Subscriber sub_stickToSurface_;      // gets sticking bool from joystick
@@ -106,6 +108,8 @@ private:
     Sophus::Sim3f last_pose_;
     Sophus::Sim3f current_pose_;
     Eigen::Matrix4f opticalToSensor_;
+    Eigen::Affine3f sensorToMav_;
+    std::string mavTFName_;
     
     int status;
 };

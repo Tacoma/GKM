@@ -118,6 +118,7 @@
 
   <!-- start plane detection -->
   <node name="project" pkg="project" type="project">
+    <param name="mavTFName" value="euroc2" />
   </node>
 
 </launch>

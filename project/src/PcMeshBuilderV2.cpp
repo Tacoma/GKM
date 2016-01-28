@@ -37,14 +37,19 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
 
 PcMeshBuilder::PcMeshBuilder()
 {
+    nh_ = ros::NodeHandle("");
+    private_nh_ = ros::NodeHandle("~");
 
     // subscriber and publisher
     sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
-    pub_pc_ = nh_.advertise< pcl::PointCloud<MyPoint> >("project/meshPc", 10);
+    pub_pc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pub_tf_ = nh_.advertise<geometry_msgs::TransformStamped>("project/plane", 10);
+    pub_tf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
+
+    //ros param
+    private_nh_.param("mavTFName", mavTFName_, std::string("world"));
 
     // init
 #ifdef VISUALIZE
@@ -66,6 +71,23 @@ PcMeshBuilder::PcMeshBuilder()
     opticalToSensor_ (2,1) =-1;
     opticalToSensor_ (2,2) = 0;
     status = -1;
+
+
+    // test
+//     tf::Transform mavToWorld;
+//     mavToWorld.setOrigin(tf::Vector3(0,0,0.117));
+//     mavToWorld.setRotation(tf::Quaternion(0,0,0,1));
+//     tf::Transform sensorToWorld;
+//     sensorToWorld.setOrigin(tf::Vector3(0.133,0,0.0605));
+//     sensorToWorld.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
+    //
+//     Eigen::Quaternionf mavToWorldRot = Eigen::Quaternionf::Identity();
+//     Eigen::Matrix4f mavToWorld;
+    Eigen::Quaternionf rot = Eigen::Quaternionf(0.98481,0,0.17365,0);
+//     Eigen::Matrix4f sensorToWorld;
+
+    sensorToMav_.translation() << 0.133,0,0.0605-0.117;
+    sensorToMav_.rotate(rot);
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
@@ -110,24 +132,24 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 {
     if (msg->isKeyframe) {
         last_msg_ = msg;
-	pointcloud_debug_ = boost::make_shared<MyPointcloud>();
-	
+        pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+
         if(searchPlane_) {
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
 
             //Find the largest plane only if no plane exists
             if(!planeExists_) {
-		Eigen::Vector2i min, max;
-		// Search in small window
-		getProcessWindow(min, max, windowSize_, windowPosY_, msg->width, msg->height);
-		processPointcloud(msg, cloud, min, max);
+                Eigen::Vector2i min, max;
+                // Search in small window
+                getProcessWindow(min, max, windowSize_, windowPosY_, msg->width, msg->height);
+                processPointcloud(msg, cloud, min, max);
                 findPlanes(cloud, 1);
             }
 
             // planeExists changes during findPlanes()
             else if (planeExists_) {
                 // Refine the largest plane with new inliers, searching in whole pointcloud
-		processPointcloud(msg, cloud);
+                processPointcloud(msg, cloud);
                 refinePlane(cloud);
 
                 //publish plane
@@ -144,8 +166,8 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
         if (last_frame_id_ > msg->id) {
             ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
             last_frame_id_ = 0;
-	    reset();
-	    
+            reset();
+
         }
         last_frame_id_ = msg->id;
     }
@@ -272,7 +294,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud)
     plane_->transform(transform);
     coefficients = plane_->getCoefficients();
 
-    // Find inliers of the plane, and 
+    // Find inliers of the plane, and
     model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
 
     // Refit the plane with new points only, if enough points were found.
@@ -283,14 +305,24 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud)
         if(coefficients_refined.size() == 4) {
             model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers); //TODO: rm debug code
             plane_->setCoefficients(coefficients_refined);
-            if (status != 0) { std::cout << "Refining Plane..." << "Ok."; status = 0; std::cout << std::endl; }
+            if (status != 0) {
+                std::cout << "Refining Plane..." << "Ok.";
+                status = 0;
+                std::cout << std::endl;
+            }
         } else {
-            if (status != 1) { std::cout  << "Refining Plane..." << " Could not find a refinement!" << std::endl; status = 1; }
+            if (status != 1) {
+                std::cout  << "Refining Plane..." << " Could not find a refinement!" << std::endl;
+                status = 1;
+            }
             return;
         }
     } else {
-        if (status != 2) { std::cout  << "Refining Plane..." << " (" << inliers->size() << "/"
-			   << cloud->size() << ") Not enough points!" << std::endl; status = 2; }
+        if (status != 2) {
+            std::cout  << "Refining Plane..." << " (" << inliers->size() << "/"
+                       << cloud->size() << ") Not enough points!" << std::endl;
+            status = 2;
+        }
         return;
     }
 
@@ -301,7 +333,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud)
     extract.filter(*cloud_filtered);
 
     // transform visualization from optical frame to sensor
-    pcl::transformPointCloud(*cloud_filtered, *cloud_filtered, opticalToSensor_);
+    pcl::transformPointCloud(*cloud_filtered, *cloud_filtered, sensorToMav_ * opticalToSensor_);
 
     *pointcloud_debug_ += *cloud_filtered;
 }
@@ -354,7 +386,7 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
         extract.setIndices(inliers);
         extract.setNegative(false);
         extract.filter(*cloud_plane);
-	*pointcloud_debug_ += *cloud_plane;
+        *pointcloud_debug_ += *cloud_plane;
 
         // Recolor the extracted pointcloud for debug visualization
         Eigen::Vector3f color = debugColors[nextColor_++%(sizeof(debugColors)/sizeof(Eigen::Vector3f))];
@@ -374,12 +406,20 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
         plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
-	switch (i) {
-	    case  1: std::cout << "| "<< i << "st plane found"; break;
-	    case  2: std::cout << "| "<< i << "nd plane found"; break;
-	    case  3: std::cout << "| "<< i << "rd plane found"; break;
-	    default: std::cout << "| "<< i << "th plane found"; break;
-	}
+        switch (i) {
+        case  1:
+            std::cout << "| "<< i << "st plane found";
+            break;
+        case  2:
+            std::cout << "| "<< i << "nd plane found";
+            break;
+        case  3:
+            std::cout << "| "<< i << "rd plane found";
+            break;
+        default:
+            std::cout << "| "<< i << "th plane found";
+            break;
+        }
     }
     std::cout << std::endl;
 
@@ -401,9 +441,9 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Ve
 }
 
 
-inline void PcMeshBuilder::getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out, 
-					    float windowSize, float windowOffset, 
-					    int width, int height)
+inline void PcMeshBuilder::getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out,
+        float windowSize, float windowOffset,
+        int width, int height)
 {
     int radius = windowSize_/2;
     min_out.x() = width/2  - radius;

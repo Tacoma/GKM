@@ -4,16 +4,19 @@
 #include <iostream>
 
 Controller::Controller() :
-    speedX_(0.6f), speedY_(0.6f), speedZ_(0.6f), speedYaw_(0.05f), goal_reached_(true),
-    search_for_plane_(false), stick_to_plane_(false), sticking_distance_(0.5f), correction_speed_(0.5f)
+    goal_reached_(true), 
+    search_for_plane_(false), 
+    stick_to_plane_(false), 
+    sticking_distance_(0.5f), 
+    correction_speed_(0.5f)
 {
     std::cout << "Controller node started..." << std::endl;
 
     // get Ros parameters and set variables
-    nh_.param("speedForward", speedX_, speedX_);
-    nh_.param("speedRight", speedY_, speedY_);
-    nh_.param("speedUp", speedZ_, speedZ_);
-    nh_.param("speedYaw", speedYaw_, speedYaw_);
+    nh_.param("speedForward", speedX_, 0.6f);
+    nh_.param("speedRight", speedY_, 0.6f);
+    nh_.param("speedUp", speedZ_, 0.6f);
+    nh_.param("speedYaw", speedYaw_, 0.05f);
 
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);

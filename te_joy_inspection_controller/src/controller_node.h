@@ -97,7 +97,7 @@ private:
     float speedY_;      // speedRightLeft
     float speedX_;      // speedForwardBackward
     float speedZ_;      // speedUpDown
-    float speedYaw_;   // speedYawn
+    float speedYaw_;   // speedYaw
 };
 
 #endif // CONTROLLER_H_
