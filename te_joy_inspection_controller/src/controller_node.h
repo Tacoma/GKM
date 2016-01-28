@@ -68,6 +68,7 @@ private:
     void testPlanes();
 
     ros::NodeHandle nh_;
+    ros::NodeHandle private_nh_;
 
     // ros subscriber, publisher and broadcaster
     ros::Subscriber sub_joy_;

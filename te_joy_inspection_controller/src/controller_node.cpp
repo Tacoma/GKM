@@ -11,12 +11,15 @@ Controller::Controller() :
     correction_speed_(0.5f)
 {
     std::cout << "Controller node started..." << std::endl;
+    
+    nh_ = ros::NodeHandle("");
+    private_nh_ = ros::NodeHandle("~");
 
     // get Ros parameters and set variables
-    nh_.param("speedForward", speedX_, 0.6f);
-    nh_.param("speedRight", speedY_, 0.6f);
-    nh_.param("speedUp", speedZ_, 0.6f);
-    nh_.param("speedYaw", speedYaw_, 0.05f);
+    private_nh_.param("speedForward", speedX_, 0.6f);
+    private_nh_.param("speedRight", speedY_, 0.6f);
+    private_nh_.param("speedUp", speedZ_, 0.6f);
+    private_nh_.param("speedYaw", speedYaw_, 0.05f);
 
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
@@ -62,6 +65,12 @@ Controller::Controller() :
     sensorToWorld.setOrigin(tf::Vector3(0.133,0,0.0605));
     sensorToWorld.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
     sensorToMav_ = mavToWorld.inverse() * sensorToWorld;
+    tf::Vector3 origin = sensorToMav_.getOrigin();
+    tf::Matrix3x3 rotation = tf::Matrix3x3(sensorToMav_.getRotation());
+    std::cout << "sensorToMav: " << std::endl << origin.x() << ", " << origin.y() << ", " << origin.z() <<std::endl <<
+		rotation[0].x() << ", " << rotation[0].y() << ", " << rotation[0].z() << std::endl <<
+		rotation[1].x() << ", " << rotation[1].y() << ", " << rotation[1].z() << std::endl <<
+		rotation[2].x() << ", " << rotation[2].y() << ", " << rotation[2].z() << std::endl;
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)

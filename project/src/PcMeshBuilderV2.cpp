@@ -45,7 +45,7 @@ PcMeshBuilder::PcMeshBuilder()
     sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
     sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
     pub_pc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
-    //pub_markers_ = nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
+    //pub_markers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
     pub_tf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
 
     //ros param
@@ -72,22 +72,10 @@ PcMeshBuilder::PcMeshBuilder()
     opticalToSensor_ (2,2) = 0;
     status = -1;
 
-
-    // test
-//     tf::Transform mavToWorld;
-//     mavToWorld.setOrigin(tf::Vector3(0,0,0.117));
-//     mavToWorld.setRotation(tf::Quaternion(0,0,0,1));
-//     tf::Transform sensorToWorld;
-//     sensorToWorld.setOrigin(tf::Vector3(0.133,0,0.0605));
-//     sensorToWorld.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
-    //
-//     Eigen::Quaternionf mavToWorldRot = Eigen::Quaternionf::Identity();
-//     Eigen::Matrix4f mavToWorld;
-    Eigen::Quaternionf rot = Eigen::Quaternionf(0.98481,0,0.17365,0);
-//     Eigen::Matrix4f sensorToWorld;
-
+    sensorToMav_ = Eigen::Affine3f::Identity();
     sensorToMav_.translation() << 0.133,0,0.0605-0.117;
-    sensorToMav_.rotate(rot);
+    sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
+    std::cout << "sensorToMav: " << sensorToMav_.matrix() << std::endl;
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
