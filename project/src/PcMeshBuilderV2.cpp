@@ -484,7 +484,7 @@ void PcMeshBuilder::publishPointclouds()
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
     pcl::toROSMsg(*union_cloud, *msg);
     msg->header.stamp = ros::Time::now();
-    msg->header.frame_id = "euroc_hex/vi_sensor/ground_truth";
+    msg->header.frame_id = mavTFName_;
     pub_pc_.publish(msg);
 
     // Publish debug
@@ -533,7 +533,7 @@ void PcMeshBuilder::publishPlane()
     // publish
     geometry_msgs::TransformStamped tf;
     tf.header.stamp = ros::Time::now();
-    tf.header.frame_id = "euroc_hex/vi_sensor/ground_truth";
+    tf.header.frame_id = mavTFName_;
     tf.transform.translation.x = intersection.x();
     tf.transform.translation.y = intersection.y();
     tf.transform.translation.z = intersection.z();

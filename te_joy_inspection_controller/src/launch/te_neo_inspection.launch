@@ -119,6 +119,8 @@
   <!-- start plane detection -->
   <node name="project" pkg="project" type="project">
     <param name="mavTFName" value="euroc2" />
+    <remap from="lsd_slam/keyframes" to="$(arg mav_name)/lsd_slam/keyframes"/>
+    <remap from="lsd_slam/liveframes" to="$(arg mav_name)/lsd_slam/liveframes"/>
   </node>
 
 </launch>
