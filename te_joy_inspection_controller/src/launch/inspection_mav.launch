@@ -8,10 +8,10 @@
   <node name="te_joy_inspection_controller" pkg="te_joy_inspection_controller" type="controller_node">
     <remap from="command/pose" to="$(arg mav_name)/command/pose" />
     <remap from="estimated_transform" to="$(arg mav_name)/msf_core/pose" />
-    <param name="speedUp" value="0.5" />
+    <param name="speedUp" value="0.6" />
     <param name="speedRight" value="0.6" />
     <param name="speedForward" value="0.6" />
-    <param name="speedYawn" value="0.05" />
+    <param name="speedYaw" value="0.2" />
   </node>
 
 </launch>

@@ -75,7 +75,6 @@ PcMeshBuilder::PcMeshBuilder()
     sensorToMav_ = Eigen::Affine3f::Identity();
     sensorToMav_.translation() << 0.133,0,0.0605-0.117;
     sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
-    std::cout << "sensorToMav: " << sensorToMav_.matrix() << std::endl;
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
