@@ -3,6 +3,11 @@
 #include <std_srvs/Empty.h>
 #include <iostream>
 
+// TODO delete
+// eval
+#include <fstream>
+static std::ofstream filestream_;
+
 Controller::Controller() :
     goal_reached_(true), 
     search_for_plane_(false), 
@@ -145,20 +150,20 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         takeoffAndHover();
     }
     // tell PcMeshBuilder to search for a plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1]) {
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
         search_for_plane_ = true;
         std_msgs::Bool sticking;
         sticking.data = search_for_plane_;
         pub_stickToSurface_.publish(sticking);
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1]) {
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
         search_for_plane_ = false;
         std_msgs::Bool sticking;
         sticking.data = search_for_plane_;
         pub_stickToSurface_.publish(sticking);
     }
     // enable or disable sticking to the plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1] && !stick_to_plane_) {
         stick_to_plane_ = true;
 
         // set current distance to surface as sticking distance
@@ -169,12 +174,29 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         normal.normalize();
         Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
         sticking_distance_ = -normal.dot(curr_pos-plane_pos);
+
+        // TODO delete
+        // eval
+        filestream_.open("//usr//stud//mueller//eval.txt", std::ofstream::out);
+        if(!filestream_) {
+            std::cout << "Error: could not open file" << std::endl;
+        } else {
+            std::cout << "Writing to file..." << std::endl;
+        }
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1] && stick_to_plane_) {
         stick_to_plane_ = false;
+
+        // TODO delete
+        // eval
+        // ...
+        if(filestream_) {
+            std::cout << "Closing file..." << std::endl;
+            filestream_.close();
+        }
     }
     // sticking distance
-    if(joy->buttons[PS3_BUTTON_CROSS_UP] && sticking_distance_ > 0.5f) {
+    if(joy->buttons[PS3_BUTTON_CROSS_UP] && abs(sticking_distance_) > 0.5f) {
         sticking_distance_ -= 0.005f;
     }
     if(joy->buttons[PS3_BUTTON_CROSS_DOWN]) {
@@ -252,6 +274,11 @@ void Controller::testPlanes()
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
     snap_goal_tf_.setRotation(plane_tf_.getRotation());
+
+    // TODO delete
+    // eval
+    filestream_ << mavToWorld_.getOrigin().x() << "," << mavToWorld_.getOrigin().y() << "," << mavToWorld_.getOrigin().z() << std::endl;
+    filestream_ << proj_pos.x() << "," << proj_pos.y() << "," << proj_pos.z() << std::endl;
 }
 
 
