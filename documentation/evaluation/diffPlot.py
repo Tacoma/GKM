@@ -32,22 +32,28 @@ for line in logFile:
 	
 #static plane def
 #point
-#pxPos = -2.38791
-#pyPos = -2.43330
-#pzPos = 1.16667
+pxPos = -0.35191
+pyPos = 2.3416
+pzPos = 1.83686
 #normal
 #pnxPos = 0
 #pnyPos = 1
 #pnzPos = 0
 
 #calculate distances
-#distances = []
-#for i in range(0, len(xPos)):
-#	distances.append(xPos[i]*pnxPos + yPos[i]*pnyPos + zPos[i]*pnzPos)
+xDistances = []
+yDistances = []
+zDistances = []
+for i in range(0, len(xPos)):
+	xDistances.append(xPos[i]-pxPos)
+	yDistances.append(yPos[i]-pyPos)
+	zDistances.append(zPos[i]-pzPos)
 
 #get min and max points
-yMin = min(yPos)
-yMax = max(yPos)
+#yMin = min(yPos)
+#yMax = max(yPos)
+yMin = min(yDistances)
+yMax = max(yDistances)
 
 #draw
 fig = plt.figure()
@@ -55,9 +61,10 @@ ax = Axes3D(fig)
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
-ax.plot(xPos, yPos, zPos, color="blue")
+#ax.plot(xPos, yPos, zPos, color="blue")
+ax.plot(xDistances, yDistances, zDistances, color="red")
 
-plt.axis([-2,2,-2,2])
+plt.axis([-5,5,-5,5])
 plt.plot([0,0], [yMin,yMax], 'ro')
 plt.plot([0,0], [yMin,yMax], '--')
 plt.title(yMax-yMin)
