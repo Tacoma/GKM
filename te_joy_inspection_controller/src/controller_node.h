@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <Eigen/Core>
 #include "sophus/sim3.hpp"
+#include "deadzone.h"
 #include <sensor_msgs/Joy.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
@@ -79,7 +80,6 @@ private:
     tf::TransformBroadcaster br_tf_;
 
     tf::Transform sensorToMav_;
-
     tf::Transform mavToWorld_;
     tf::Transform transform_;
 
@@ -93,6 +93,9 @@ private:
     float correction_speed_;
     tf::Transform plane_tf_;
     tf::Transform snap_goal_tf_;
+
+    // stick deadzone
+    Deadzone<float> stick_deadzone_ = Deadzone<float>(0.1f);
 
     // Ros parameters
     float speedY_;      // speedRightLeft
