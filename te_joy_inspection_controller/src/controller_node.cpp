@@ -29,7 +29,7 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("project/plane", 10, &Controller::processPlaneMsg, this);
+    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processPlaneMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("controller/stickToSurface", 10);
 
@@ -149,7 +149,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         goal_reached_ = false;
         takeoffAndHover();
     }
-    // tell PcMeshBuilder to search for a plane
+    // tell SurfaceDetection to search for a plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
         search_for_plane_ = true;
         std_msgs::Bool sticking;

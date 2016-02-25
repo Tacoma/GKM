@@ -16,7 +16,7 @@
 
 #include <iostream>
 #include <eigen3/Eigen/src/Core/Matrix.h>
-#include "PcMeshBuilderV2.h"
+#include "surface_detection.h"
 
 
 const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
@@ -35,15 +35,15 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
 
 
 
-PcMeshBuilder::PcMeshBuilder()
+SurfaceDetection::SurfaceDetection()
 {
     nh_ = ros::NodeHandle("");
     private_nh_ = ros::NodeHandle("~");
 
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &PcMeshBuilder::processMessageStickToSurface, this);
-    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &PcMeshBuilder::setStickToSurface, this);
+    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessageStickToSurface, this);
+    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessageStickToSurface, this);
+    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setStickToSurface, this);
     pub_pc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pub_markers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
     pub_tf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
@@ -78,20 +78,20 @@ PcMeshBuilder::PcMeshBuilder()
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
-    f = boost::bind(&PcMeshBuilder::configCallback, this, _1, _2);
+    f = boost::bind(&SurfaceDetection::configCallback, this, _1, _2);
     server_.setCallback(f);
 
-    std::cout << "PcMeshBuilder started..." << std::endl;
+    std::cout << "SurfaceDetection started..." << std::endl;
 }
 
 
-PcMeshBuilder::~PcMeshBuilder()
+SurfaceDetection::~SurfaceDetection()
 {
     reset();
 }
 
 
-void PcMeshBuilder::reset()
+void SurfaceDetection::reset()
 {
 #ifdef VISUALIZE
     pointcloud_planar_ = boost::make_shared<MyPointcloud>();
@@ -105,7 +105,7 @@ void PcMeshBuilder::reset()
 }
 
 
-void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg)
+void SurfaceDetection::setStickToSurface(const std_msgs::Bool::ConstPtr& msg)
 {
     if (searchPlane_ == msg->data) {
         return;
@@ -115,7 +115,7 @@ void PcMeshBuilder::setStickToSurface(const std_msgs::Bool::ConstPtr& msg)
 }
 
 
-void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg)
+void SurfaceDetection::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 {
     if (msg->isKeyframe) {
         last_msg_ = msg;
@@ -162,12 +162,12 @@ void PcMeshBuilder::processMessageStickToSurface(const lsd_slam_msgs::keyframeMs
 }
 
 
-void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud)
+void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud)
 {
     processPointcloud(msg, cloud, Eigen::Vector2i(0,0), Eigen::Vector2i(msg->width, msg->height));
 }
 
-void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg,
+void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg,
                                       MyPointcloud::Ptr cloud,
                                       Eigen::Vector2i min,
                                       Eigen::Vector2i max)
@@ -262,7 +262,7 @@ void PcMeshBuilder::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr m
 }
 
 
-void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud)
+void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
 {
     // Init
     MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
@@ -330,7 +330,7 @@ void PcMeshBuilder::refinePlane(MyPointcloud::Ptr cloud)
  * looks for num_planes planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
  */
-void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
+void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
 {
     std::cout << "Searching " << num_planes << " plane(s) in " << cloud->size() << " points.";
     // Init
@@ -418,7 +418,7 @@ void PcMeshBuilder::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
 }
 
 
-inline void PcMeshBuilder::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color)
+inline void SurfaceDetection::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color)
 {
     for(int i=0; i<cloud_in->points.size(); i++) {
         cloud_in->points[i].r = color.x();
@@ -428,7 +428,7 @@ inline void PcMeshBuilder::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Ve
 }
 
 
-inline void PcMeshBuilder::getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out,
+inline void SurfaceDetection::getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out,
         float windowSize, float windowOffset,
         int width, int height)
 {
@@ -440,7 +440,7 @@ inline void PcMeshBuilder::getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vec
 }
 
 
-inline void PcMeshBuilder::clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height)
+inline void SurfaceDetection::clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height)
 {
     // Check values (clamp and swap)
     // Offset of 1 for minNearSupport
@@ -451,13 +451,13 @@ inline void PcMeshBuilder::clampProcessWindow(Eigen::Vector2i &min_inout, Eigen:
 }
 
 
-inline int PcMeshBuilder::clamp(int x, int min, int max)
+inline int SurfaceDetection::clamp(int x, int min, int max)
 {
     return (x < min) ? min : ((x > max) ? max : x);
 }
 
 
-void PcMeshBuilder::publishPointclouds()
+void SurfaceDetection::publishPointclouds()
 {
     MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
 
@@ -482,7 +482,7 @@ void PcMeshBuilder::publishPointclouds()
 
 }
 
-void PcMeshBuilder::publishPolygons()
+void SurfaceDetection::publishPolygons()
 {
 //     jsk_recognition_msgs::PolygonArray markers;
 //     markers.header.frame_id = "world";
@@ -506,7 +506,7 @@ void PcMeshBuilder::publishPolygons()
 //     pub_markers_.publish(markers);
 }
 
-void PcMeshBuilder::publishPlane()
+void SurfaceDetection::publishPlane()
 {
     // calculate Plane position
     Eigen::Vector3f cam_t(0,0,0);
@@ -532,7 +532,7 @@ void PcMeshBuilder::publishPlane()
 }
 
 
-void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t level)
+void SurfaceDetection::configCallback(project::projectConfig &config, uint32_t level)
 {
 
     std::cout << "Configurating." << std::endl;
@@ -557,7 +557,7 @@ void PcMeshBuilder::configCallback(project::projectConfig &config, uint32_t leve
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "project");
-    PcMeshBuilder pcBuilder;
+    SurfaceDetection surfaceDetection;
     ros::spin();
     return 0;
 }

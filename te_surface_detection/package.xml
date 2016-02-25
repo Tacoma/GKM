@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>project</name>
+  <name>te_surface_detection</name>
   <version>0.0.0</version>
-  <description>The project package</description>
+  <description>Runs RUNSAC over pointclouds to detect surfaces and track them</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <maintainer email="philipp_mueller1991@yahoo.de">Philipp Mueller</maintainer>

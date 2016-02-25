@@ -18,7 +18,8 @@
     <node name="joy" pkg="joy" type="joy_node" output="screen" />
     <node name="te_joy_inspection_controller" pkg="te_joy_inspection_controller" type="controller_node">
       <remap from="command/pose" to="command/pose" />
-      <remap from="estimated_transform" to="msf_core/pose" />      
+      <remap from="estimated_transform" to="msf_core/pose" />   
+      <remap from="plane" to="te_surface_detection/plane" />   
       <param name="speedUp" value="1.5" />
       <param name="speedRight" value="1.6" />
       <param name="speedForward" value="1.6" />
@@ -26,7 +27,7 @@
     </node>
     
       <!-- start plane detection -->
-    <node name="project" pkg="project" type="project">
+    <node name="te_surface_detection" pkg="te_surface_detection" type="te_surface_detection">
       <param name="mavTFName" value="euroc_hex/ground_truth" />
     </node>
 

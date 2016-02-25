@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(project)
+project(te_surface_detection)
 
 find_package(catkin REQUIRED COMPONENTS
   image_geometry
@@ -32,9 +32,8 @@ include_directories(
 #  ${Eigen_INCLUDE_DIRS}
 )
 
-add_executable(${PROJECT_NAME} src/PcMeshBuilderV2.cpp)
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-add_dependencies(project ${PROJECT_NAME}_gencfg)
+add_executable(${PROJECT_NAME} src/surface_detection.cpp)
+add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg)
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 

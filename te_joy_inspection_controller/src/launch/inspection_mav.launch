@@ -8,6 +8,7 @@
   <node name="te_joy_inspection_controller" pkg="te_joy_inspection_controller" type="controller_node">
     <remap from="command/pose" to="$(arg mav_name)/command/pose" />
     <remap from="estimated_transform" to="$(arg mav_name)/msf_core/pose" />
+    <remap from="plane" to="te_surface_detection/plane" /> 
     <param name="speedUp" value="0.6" />
     <param name="speedRight" value="0.6" />
     <param name="speedForward" value="0.6" />

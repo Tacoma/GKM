@@ -30,12 +30,12 @@ struct InputPointDense
     uchar color[4];
 };
 
-// ------------------------- PcMeshBuilder -------------------------
-class PcMeshBuilder {
+// ------------------------- SurfaceDetection -------------------------
+class SurfaceDetection {
 // --------------- functions ---------------
 public:
-    PcMeshBuilder();
-    ~PcMeshBuilder();
+    SurfaceDetection();
+    ~SurfaceDetection();
 
 private:
     void setStickToSurface(const std_msgs::Bool::ConstPtr& msg);
