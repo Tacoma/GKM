@@ -105,6 +105,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
         testPlanes();
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
         curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
+	//curr_transform.setOrigin(snap_goal_tf_.getOrigin());
         curr_transform.setRotation(snap_goal_tf_.getRotation());
     } else {
         curr_transform = mavToWorld_ * transform_;
@@ -134,28 +135,6 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
 
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
-    if(std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) <= STICK_DEADZONE &&
-	std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) <= STICK_DEADZONE &&
-	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) <= STICK_DEADZONE &&
-	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]) <= STICK_DEADZONE) {
-	is_active_ = false;
-	return;
-    }
-    is_active_ = true;
- 
-    /// translation from controller axis
-    float jx = speedX_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]);
-    float jy = speedY_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]);
-    float jz = speedZ_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]);
-    // yaw from axis
-    float jr = speedYaw_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]);
-
-    // save only the latest relative transform in global variable transform_
-    transform_.setOrigin( tf::Vector3(jx,jy,jz) );
-    tf::Quaternion q;
-    q.setRPY(0,0,jr);
-    transform_.setRotation(q);
-
     /// buttons
     // listen for take off button pressed
     if(joy->buttons[PS3_BUTTON_PAIRING] || joy->buttons[PS3_BUTTON_START]) {
@@ -178,6 +157,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
     // enable or disable sticking to the plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1] && !stick_to_plane_) {
         stick_to_plane_ = true;
+	is_active_ = true;
 
         // set current distance to surface as sticking distance
         Eigen::Vector3f plane_pos = Eigen::Vector3f( plane_tf_.getOrigin().x(), plane_tf_.getOrigin().y(), plane_tf_.getOrigin().z() );
@@ -190,7 +170,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 
         // TODO delete
         // eval
-        filestream_.open("//usr//stud//mueller//eval.txt", std::ofstream::out);
+        filestream_.open("//usr//stud//grzimek//eval.txt", std::ofstream::out);
         if(!filestream_) {
             std::cout << "Error: could not open file" << std::endl;
         } else {
@@ -211,10 +191,32 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
     // sticking distance
     if(joy->buttons[PS3_BUTTON_CROSS_UP] && abs(sticking_distance_) > 0.5f) {
         sticking_distance_ -= 0.005f;
+	is_active_ = true;
     }
     if(joy->buttons[PS3_BUTTON_CROSS_DOWN]) {
         sticking_distance_ += 0.005f;
+	is_active_ = true;
     }
+
+    /// axes
+    if(std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) > STICK_DEADZONE ||
+	std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) > STICK_DEADZONE ||
+	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) > STICK_DEADZONE ||
+	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]) > STICK_DEADZONE) {
+	is_active_ = true;
+    }
+    /// translation from controller axis
+    float jx = speedX_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]);
+    float jy = speedY_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]);
+    float jz = speedZ_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]);
+    // yaw from axis
+    float jr = speedYaw_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]);
+
+    // save only the latest relative transform in global variable transform_
+    transform_.setOrigin( tf::Vector3(jx,jy,jz) );
+    tf::Quaternion q;
+    q.setRPY(0,0,jr);
+    transform_.setRotation(q);
 }
 
 void Controller::takeoffAndHover()
@@ -232,6 +234,7 @@ void Controller::takeoffAndHover()
 
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
 {
+    
     // realtive plane transform
     // planeToCam = plane_tf
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
