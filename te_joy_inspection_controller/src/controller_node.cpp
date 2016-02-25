@@ -3,6 +3,8 @@
 #include <std_srvs/Empty.h>
 #include <iostream>
 
+#define STICK_DEADZONE 0.1f
+
 // TODO delete
 // eval
 #include <fstream>
@@ -19,6 +21,9 @@ Controller::Controller() :
     
     nh_ = ros::NodeHandle("");
     private_nh_ = ros::NodeHandle("~");
+
+    // set stick deadzone
+    stick_deadzone_ = Deadzone<float>(STICK_DEADZONE);
 
     // get Ros parameters and set variables
     private_nh_.param("speedForward", speedX_, 0.5f);
@@ -62,7 +67,7 @@ Controller::Controller() :
     snap_goal_tf_.setOrigin(tf::Vector3(0,0,0));
     snap_goal_tf_.setRotation(q);
 
-    // hack
+    // hardcoded sensorToMav transform
     tf::Transform mavToWorld;
     mavToWorld.setOrigin(tf::Vector3(0,0,0.117));
     mavToWorld.setRotation(tf::Quaternion(0,0,0,1));
@@ -70,12 +75,6 @@ Controller::Controller() :
     sensorToWorld.setOrigin(tf::Vector3(0.133,0,0.0605));
     sensorToWorld.setRotation(tf::Quaternion(0,0.17365,0,0.98481));
     sensorToMav_ = mavToWorld.inverse() * sensorToWorld;
-//     tf::Vector3 origin = sensorToMav_.getOrigin();
-//     tf::Matrix3x3 rotation = tf::Matrix3x3(sensorToMav_.getRotation());
-//     std::cout << "sensorToMav: " << std::endl << origin.x() << ", " << origin.y() << ", " << origin.z() <<std::endl <<
-// 		rotation[0].x() << ", " << rotation[0].y() << ", " << rotation[0].z() << std::endl <<
-// 		rotation[1].x() << ", " << rotation[1].y() << ", " << rotation[1].z() << std::endl <<
-// 		rotation[2].x() << ", " << rotation[2].y() << ", " << rotation[2].z() << std::endl;
 }
 
 void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
@@ -83,12 +82,12 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     mavToWorld_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
     mavToWorld_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
+    /// takeoff and hover blocks until goal is reached
     if(!goal_reached_) {
         tf::Transform diff = mavToWorld_.inverse() * hover_goal_tf_;
         if(diff.getOrigin().length() < 0.05f) {
             goal_reached_ = true;
-        }
-        else {
+        } else {
             transform_ = diff;
         }
     }
@@ -96,7 +95,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     // world transform
     tf::Transform curr_transform;
     /// stick to plane
-    if(stick_to_plane_) {
+    if(stick_to_plane_ && goal_reached_) {
         testPlanes();
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
         curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
@@ -105,7 +104,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
         curr_transform = mavToWorld_ * transform_;
     }
 
-    // convert tf into pose and publish the pose
+    /// convert tf into pose and publish the pose
     tf::Vector3 desired_pos = curr_transform.getOrigin();
     tf::Quaternion desired_rot = curr_transform.getRotation();
 
@@ -129,12 +128,20 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
 
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
+    /// test if RC is active, via deadzone tests
+    if(std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) <= STICK_DEADZONE &&
+       std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) <= STICK_DEADZONE &&
+       std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) <= STICK_DEADZONE) {
+        // all inputs in deadzone, return here
+        return;
+    }
+
     /// translation from controller axis
-    float jx = speedX_ * joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS];
-    float jy = speedY_ * joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS];
-    float jz = speedZ_ * joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS];
+    float jx = speedX_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]);
+    float jy = speedY_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]);
+    float jz = speedZ_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]);
     // yaw from axis
-    float jr = speedYaw_ * joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS];
+    float jr = speedYaw_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]);
 
     // save only the latest relative transform in global variable transform_
     transform_.setOrigin( tf::Vector3(jx,jy,jz) );
@@ -144,8 +151,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 
     /// buttons
     // listen for take off button pressed
-    if(joy->buttons[PS3_BUTTON_PAIRING] || joy->buttons[PS3_BUTTON_START])
-    {
+    if(joy->buttons[PS3_BUTTON_PAIRING] || joy->buttons[PS3_BUTTON_START]) {
         goal_reached_ = false;
         takeoffAndHover();
     }
@@ -208,13 +214,13 @@ void Controller::takeoffAndHover()
 {
     std_srvs::Empty::Request request;
     std_srvs::Empty::Response response;
-    ros::service::call("euroc2/takeoff", request, response);
+    if(ros::service::call("euroc2/takeoff", request, response)) {
+        tf::Vector3 desired_pos = tf::Vector3( mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), 1.0f);
+        tf::Quaternion desired_rot = mavToWorld_.getRotation();
 
-    tf::Vector3 desired_pos = tf::Vector3( mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), 1.0f);
-    tf::Quaternion desired_rot = mavToWorld_.getRotation();
-
-    hover_goal_tf_.setOrigin(desired_pos);
-    hover_goal_tf_.setRotation(desired_rot);
+        hover_goal_tf_.setOrigin(desired_pos);
+        hover_goal_tf_.setRotation(desired_rot);
+    }
 }
 
 void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
