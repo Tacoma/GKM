@@ -15,7 +15,8 @@ Controller::Controller() :
     search_for_plane_(false), 
     stick_to_plane_(false), 
     sticking_distance_(0.5f), 
-    correction_speed_(0.5f)
+    correction_speed_(0.5f),
+    is_active_(false)
 {
     std::cout << "Controller node started..." << std::endl;
     
@@ -85,12 +86,17 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     /// takeoff and hover blocks until goal is reached
     if(!goal_reached_) {
         tf::Transform diff = mavToWorld_.inverse() * hover_goal_tf_;
-        if(diff.getOrigin().length() < 0.05f) {
+        if(diff.getOrigin().length() < 0.1f) {
             goal_reached_ = true;
         } else {
             transform_ = diff;
         }
     }
+    
+    if (!is_active_) {
+	return;
+    }
+    is_active_ = false;
 
     // world transform
     tf::Transform curr_transform;
@@ -128,14 +134,15 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
 
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
-    /// test if RC is active, via deadzone tests
     if(std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) <= STICK_DEADZONE &&
-       std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) <= STICK_DEADZONE &&
-       std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) <= STICK_DEADZONE) {
-        // all inputs in deadzone, return here
-        return;
+	std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) <= STICK_DEADZONE &&
+	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) <= STICK_DEADZONE &&
+	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]) <= STICK_DEADZONE) {
+	is_active_ = false;
+	return;
     }
-
+    is_active_ = true;
+ 
     /// translation from controller axis
     float jx = speedX_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]);
     float jy = speedY_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]);
@@ -286,6 +293,7 @@ void Controller::testPlanes()
     filestream_ << mavToWorld_.getOrigin().x() << "," << mavToWorld_.getOrigin().y() << "," << mavToWorld_.getOrigin().z() << std::endl;
     filestream_ << proj_pos.x() << "," << proj_pos.y() << "," << proj_pos.z() << std::endl;
 }
+
 
 
 int main(int argc, char** argv)

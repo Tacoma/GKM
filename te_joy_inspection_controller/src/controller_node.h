@@ -96,6 +96,7 @@ private:
 
     // stick deadzone
     Deadzone<float> stick_deadzone_ = Deadzone<float>(0.1f);
+    bool is_active_;
 
     // Ros parameters
     float speedY_;      // speedRightLeft
