@@ -41,9 +41,9 @@ SurfaceDetection::SurfaceDetection()
     private_nh_ = ros::NodeHandle("~");
 
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessageStickToSurface, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessageStickToSurface, this);
-    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setStickToSurface, this);
+    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessage, this);
+    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);
+    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
     pub_pc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pub_markers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
     pub_tf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
@@ -77,7 +77,7 @@ SurfaceDetection::SurfaceDetection()
     sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
 
     // Setting up Dynamic Reconfiguration
-    dynamic_reconfigure::Server<project::projectConfig>::CallbackType f;
+    dynamic_reconfigure::Server<te_surface_detection::generalConfig>::CallbackType f;
     f = boost::bind(&SurfaceDetection::configCallback, this, _1, _2);
     server_.setCallback(f);
 
@@ -105,17 +105,20 @@ void SurfaceDetection::reset()
 }
 
 
-void SurfaceDetection::setStickToSurface(const std_msgs::Bool::ConstPtr& msg)
+void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
 {
     if (searchPlane_ == msg->data) {
         return;
     }
     reset();
     searchPlane_ = msg->data;
+    if (last_msg_) {
+	processMessage(last_msg_);
+    }
 }
 
 
-void SurfaceDetection::processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg)
+void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 {
     if (msg->isKeyframe) {
         last_msg_ = msg;
@@ -133,9 +136,9 @@ void SurfaceDetection::processMessageStickToSurface(const lsd_slam_msgs::keyfram
                 findPlanes(cloud, 1);
             }
 
-            // planeExists changes during findPlanes()
-            else if (planeExists_) {
-                // Refine the largest plane with new inliers, searching in whole pointcloud
+            // We don't want to call refine Plane for the same message
+            else {
+                // Transform and refine the plane with new inliers, searching in whole pointcloud
                 processPointcloud(msg, cloud);
                 refinePlane(cloud);
 
@@ -143,11 +146,13 @@ void SurfaceDetection::processMessageStickToSurface(const lsd_slam_msgs::keyfram
                 publishPlane();
             }
 
-            // add to vector and accumulated pointcloud
-            publishPointclouds();
+            // rememember pose for plane transformation
             last_pose_ = current_pose_;
+	    
+	    publishPointclouds();
         }
-
+        
+    // !isKeyframe
     } else {
         // check for reset
         if (last_frame_id_ > msg->id) {
@@ -324,6 +329,7 @@ void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
 
     *pointcloud_debug_ += *cloud_filtered;
 }
+
 
 
 /**
@@ -532,7 +538,7 @@ void SurfaceDetection::publishPlane()
 }
 
 
-void SurfaceDetection::configCallback(project::projectConfig &config, uint32_t level)
+void SurfaceDetection::configCallback(te_surface_detection::generalConfig &config, uint32_t level)
 {
 
     std::cout << "Configurating." << std::endl;
@@ -544,19 +550,21 @@ void SurfaceDetection::configCallback(project::projectConfig &config, uint32_t l
     distanceThreshold_ = config.distanceThreshold;
     windowSize_ = config.windowSize;
     windowPosY_ = config.windowPosY;
-    minPointsForEstimation_ = config.minPointsForEstimation;
-    noisePercentage_ = 1-config.planarPercentage;
-    maxPlanesPerCloud_ = config.maxPlanesPerCloud;
+    // debug parameters
+    //minPointsForEstimation_ = config.minPointsForEstimation;
+    //noisePercentage_ = 1-config.planarPercentage;
+    //maxPlanesPerCloud_ = config.maxPlanesPerCloud;
 
+    // apply changes to last message
     if (last_msg_) {
-        processMessageStickToSurface(last_msg_);
+        processMessage(last_msg_);
     }
 }
 
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "project");
+    ros::init(argc, argv, "te_surface_detection");
     SurfaceDetection surfaceDetection;
     ros::spin();
     return 0;

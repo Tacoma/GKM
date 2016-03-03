@@ -15,7 +15,7 @@
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Pose.h>
 // Dynamic Reconfiguration
-#include "project/projectConfig.h"
+#include "te_surface_detection/generalConfig.h"
 #include <dynamic_reconfigure/server.h>
 //
 #include "sophus/sim3.hpp"
@@ -38,13 +38,14 @@ public:
     ~SurfaceDetection();
 
 private:
-    void setStickToSurface(const std_msgs::Bool::ConstPtr& msg);
-    void processMessageStickToSurface(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
+    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud,
                            Eigen::Vector2i min, Eigen::Vector2i max);
     void refinePlane(MyPointcloud::Ptr cloud);
-    void findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes=3);
+    void findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes=1);
+    void findCylinder(MyPointcloud::Ptr cloud, unsigned int num_cylinders=1);
     void publishPointclouds();
     void publishPolygons();
     void publishPlane();
@@ -57,7 +58,7 @@ private:
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
 
-    void configCallback(project::projectConfig &config, uint32_t level);
+    void configCallback(te_surface_detection::generalConfig &config, uint32_t level);
 
 
 // --------------- members ---------------
@@ -88,7 +89,7 @@ private:
     bool planeExists_;
 
     // Parameters
-    dynamic_reconfigure::Server<project::projectConfig> server_;
+    dynamic_reconfigure::Server<te_surface_detection::generalConfig> server_;
     float scaledDepthVarTH_;
     float absDepthVarTH_;
     int minNearSupport_;
