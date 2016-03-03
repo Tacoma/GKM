@@ -11,6 +11,8 @@
 #include <lsd_slam_msgs/keyframeMsg.h>
 #include <lsd_slam_msgs/keyframeGraphMsg.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
+#include <tf_conversions/tf_eigen.h>
 #include <std_msgs/Bool.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Pose.h>
@@ -21,7 +23,7 @@
 #include "sophus/sim3.hpp"
 #include "plane.hpp"
 
-//#define VISUALIZE // debug visualization
+#define VISUALIZE // debug visualization
 
 struct InputPointDense
 {
@@ -44,7 +46,7 @@ private:
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud,
                            Eigen::Vector2i min, Eigen::Vector2i max);
     void refinePlane(MyPointcloud::Ptr cloud);
-    void findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes=1);
+    void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
     void findCylinder(MyPointcloud::Ptr cloud, unsigned int num_cylinders=1);
     void publishPointclouds();
     void publishPolygons();
@@ -78,10 +80,12 @@ private:
 
 
 #ifdef VISUALIZE
-    MyPointcloud::Ptr pointcloud_planar_;
-    MyPointcloud::Ptr pointcloud_non_planar_;
+	// in world frame
+    MyPointcloud::Ptr pcVisSurfaces_;
+    MyPointcloud::Ptr pcVisOutliers_;
 #endif
-    MyPointcloud::Ptr pointcloud_debug_;
+	// in optical frame
+    MyPointcloud::Ptr pcVisDebug_;
 
     // Planes
     SimplePlane::Ptr plane_;
@@ -97,17 +101,16 @@ private:
     float distanceThreshold_;
     int windowSize_;
     int windowPosY_;
-
     int minPointsForEstimation_;
     float noisePercentage_;
     int maxPlanesPerCloud_;
 
     // Stuff
     int nextColor_;
-    lsd_slam_msgs::keyframeMsgConstPtr last_msg_;
-    unsigned int last_frame_id_;
-    Sophus::Sim3f last_pose_;
-    Sophus::Sim3f current_pose_;
+    lsd_slam_msgs::keyframeMsgConstPtr lastMsg_;
+    unsigned int lastFrameId_;
+    Sophus::Sim3f lastPose_;
+    Sophus::Sim3f currentPose_;
     Eigen::Matrix4f opticalToSensor_;
     Eigen::Affine3f sensorToMav_;
     std::string mavTFName_;

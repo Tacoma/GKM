@@ -4,6 +4,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/features/normal_3d.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
@@ -35,7 +36,17 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
 
 
 
-SurfaceDetection::SurfaceDetection()
+SurfaceDetection::SurfaceDetection() :
+    scaledDepthVarTH_(-1),
+    absDepthVarTH_(-1),
+    minNearSupport_(0),
+    sparsifyFactor_(0),
+    distanceThreshold_(0.003),
+    windowSize_(640),
+    windowPosY_(0),
+    minPointsForEstimation_(3),
+    noisePercentage_(0),
+    maxPlanesPerCloud_(1)
 {
     nh_ = ros::NodeHandle("");
     private_nh_ = ros::NodeHandle("~");
@@ -53,10 +64,10 @@ SurfaceDetection::SurfaceDetection()
 
     // init
 #ifdef VISUALIZE
-    pointcloud_planar_ = boost::make_shared<MyPointcloud>();
-    pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
+    pcVisSurfaces_ = boost::make_shared<MyPointcloud>();
+    pcVisOutliers_ = boost::make_shared<MyPointcloud>();
 #endif
-    pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+    pcVisDebug_ = boost::make_shared<MyPointcloud>();
     searchPlane_ = false;
     planeExists_ = false;
     opticalToSensor_ = Eigen::Matrix4f::Identity();
@@ -94,8 +105,8 @@ SurfaceDetection::~SurfaceDetection()
 void SurfaceDetection::reset()
 {
 #ifdef VISUALIZE
-    pointcloud_planar_ = boost::make_shared<MyPointcloud>();
-    pointcloud_non_planar_ = boost::make_shared<MyPointcloud>();
+    pcVisSurfaces_ = boost::make_shared<MyPointcloud>();
+    pcVisOutliers_ = boost::make_shared<MyPointcloud>();
 #endif
 
     plane_.reset();
@@ -112,8 +123,8 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
     }
     reset();
     searchPlane_ = msg->data;
-    if (last_msg_) {
-	processMessage(last_msg_);
+    if (lastMsg_) {
+		processMessage(lastMsg_);
     }
 }
 
@@ -121,8 +132,8 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
 void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 {
     if (msg->isKeyframe) {
-        last_msg_ = msg;
-        pointcloud_debug_ = boost::make_shared<MyPointcloud>();
+        lastMsg_ = msg;
+        pcVisDebug_ = boost::make_shared<MyPointcloud>();
 
         if(searchPlane_) {
             MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
@@ -147,7 +158,7 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
             }
 
             // rememember pose for plane transformation
-            last_pose_ = current_pose_;
+            lastPose_ = currentPose_;
 	    
 	    publishPointclouds();
         }
@@ -155,13 +166,13 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
     // !isKeyframe
     } else {
         // check for reset
-        if (last_frame_id_ > msg->id) {
-            ROS_INFO_STREAM("detected backward-jump in id (" << last_frame_id_ << " to " << msg->id << "), resetting!");
-            last_frame_id_ = 0;
+        if (lastFrameId_ > msg->id) {
+            ROS_INFO_STREAM("detected backward-jump in id (" << lastFrameId_ << " to " << msg->id << "), resetting!");
+            lastFrameId_ = 0;
             reset();
 
         }
-        last_frame_id_ = msg->id;
+        lastFrameId_ = msg->id;
     }
 
 }
@@ -177,7 +188,7 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
                                       Eigen::Vector2i min,
                                       Eigen::Vector2i max)
 {
-    memcpy(current_pose_.data(), msg->camToWorld.data(), 7*sizeof(float));
+    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
 
     float fxi = 1.0/msg->fx;
     float fyi = 1.0/msg->fy;
@@ -205,7 +216,7 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
     }
 
     clampProcessWindow(min, max, width, height);
-    float worldScale = current_pose_.scale();
+    float worldScale = currentPose_.scale();
 
     cloud->resize(width*height);
     int numPoints = 0;
@@ -261,16 +272,17 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
     } // y
     // refit pointcloud and search for planes
     cloud->resize(numPoints);
-    //pcl::transformPointCloud(*cloud,*cloud,current_pose_.matrix());
+    //pcl::transformPointCloud(*cloud,*cloud,currentPose_.matrix());
 
     delete[] originalInput_;
 }
 
 
+
 void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
 {
     // Init
-    MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
+    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
 
     // Create the planar model and set all the parameters
     pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
@@ -280,7 +292,7 @@ void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
 
 
     Eigen::VectorXf coefficients, coefficients_refined;
-    Eigen::Matrix4f transform = current_pose_.matrix().inverse() * last_pose_.matrix();
+    Eigen::Matrix4f transform = currentPose_.matrix().inverse() * lastPose_.matrix();
 
     // Transform plane into new frame and get coefficients
     plane_->transform(transform);
@@ -322,32 +334,28 @@ void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
     extract.setInputCloud(cloud);
     extract.setIndices(inliers);
     extract.setNegative(false);
-    extract.filter(*cloud_filtered);
+    extract.filter(*pcFiltered);  
 
-    // transform visualization from optical frame to sensor
-    pcl::transformPointCloud(*cloud_filtered, *cloud_filtered, sensorToMav_ * opticalToSensor_);
-
-    *pointcloud_debug_ += *cloud_filtered;
+    *pcVisDebug_ += *pcFiltered;
 }
 
 
 
 /**
- * looks for num_planes planes in cloud_in and returns all points in these planes,
+ * looks for numSurfaces planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
  */
-void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_planes)
+void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces)
 {
-    std::cout << "Searching " << num_planes << " plane(s) in " << cloud->size() << " points.";
+    std::cout << "Searching " << numSurfaces << " plane(s) in " << cloud->size() << " points.";
     // Init
-    MyPointcloud::Ptr cloud_cropped = cloud;
+    MyPointcloud::Ptr pcCropped = cloud;
     int size = cloud->size();
     // Allocation
-    MyPointcloud::Ptr cloud_filtered = boost::make_shared<MyPointcloud>();
+    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
 #ifdef VISUALIZE
-    MyPointcloud::Ptr cloud_union_planar = boost::make_shared<MyPointcloud>();
+    MyPointcloud::Ptr pcVisSurfaces = boost::make_shared<MyPointcloud>();
 #endif
-    MyPointcloud::Ptr cloud_plane = boost::make_shared<MyPointcloud>();
 
 
     // Create the segmentation object for the planar model and set all the parameters
@@ -362,10 +370,10 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_plan
     seg.setDistanceThreshold(distanceThreshold_);
 
     // Extract the planar inliers from the input cloud
-    for(int i=0; i<num_planes && cloud_cropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
+    for(int i=0; i<numSurfaces && pcCropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
 
         // Segment the largest planar component from the cropped cloud
-        seg.setInputCloud(cloud_cropped);
+        seg.setInputCloud(pcCropped);
         seg.segment(*inliers, *coefficients);
         if(inliers->indices.size() == 0 || coefficients->values.size() != 4) {
             ROS_WARN_STREAM ("Could not estimate a planar model for the given pointcloud data");
@@ -373,55 +381,155 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int num_plan
         }
 
 
-#ifdef VISUALIZE
-        // Extract the inliers
-        extract.setInputCloud(cloud_cropped);
+        // Extract the inliers/outliers
+        extract.setInputCloud(pcCropped);
         extract.setIndices(inliers);
-        extract.setNegative(false);
-        extract.filter(*cloud_plane);
-        *pointcloud_debug_ += *cloud_plane;
-
+#ifdef VISUALIZE
+        extract.filter(*pcFiltered);
         // Recolor the extracted pointcloud for debug visualization
         Eigen::Vector3f color = debugColors[nextColor_++%(sizeof(debugColors)/sizeof(Eigen::Vector3f))];
-        colorPointcloud(cloud_plane, color);
+        colorPointcloud(pcFiltered, color);
         // add newly created pointcloud in the union pointcloud
-        *cloud_union_planar += *cloud_plane;
+        *pcVisSurfaces += *pcFiltered;
 #endif
-
-        // Extract the outliers
-        extract.setInputCloud(cloud_cropped);
-        extract.setIndices(inliers);
         extract.setNegative(true);
-        extract.filter(*cloud_filtered);
-        cloud_cropped.swap(cloud_filtered);
+        extract.filter(*pcFiltered);
+        pcCropped.swap(pcFiltered);
 
         // Create plane and add points
         plane_.reset(new SimplePlane(coefficients->values));
         planeExists_ = true;
         i++;
+        std::cout << "| " << i;
         switch (i) {
-        case  1:
-            std::cout << "| "<< i << "st plane found";
-            break;
-        case  2:
-            std::cout << "| "<< i << "nd plane found";
-            break;
-        case  3:
-            std::cout << "| "<< i << "rd plane found";
-            break;
-        default:
-            std::cout << "| "<< i << "th plane found";
-            break;
+        case  1:  std::cout << "st"; break;
+        case  2:  std::cout << "nd"; break;
+        case  3:  std::cout << "rd"; break;
+        default:  std::cout << "th"; break;
         }
+        std::cout << " plane found";
     }
     std::cout << std::endl;
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    *pointcloud_planar_ = *cloud_union_planar;
-    *pointcloud_non_planar_ = *cloud_cropped;
+    tf::TransformListener listener;
+    tf::StampedTransform transform;
+    try {  listener.lookupTransform(mavTFName_, "/world", ros::Time::now(), transform);  }
+    catch (tf::TransformException ex){  ROS_ERROR("%s",ex.what());  }
+    Eigen::Affine3d mavToWorld;
+	tf::transformTFToEigen(transform, mavToWorld);
+    //pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld * sensorToMav_ * opticalToSensor_);
+    //pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld* sensorToMav_ * opticalToSensor_);
+    *pcVisSurfaces_ = *pcVisSurfaces;
+    *pcVisOutliers_ = *pcCropped;
 #endif
 }
+// -------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+/**
+ * looks for numSurfaces planes in cloud_in and returns all points in these planes,
+ * colored to the corresponding plane.
+ */
+void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSurfaces)
+{
+    std::cout << "Searching " << numSurfaces << " cylinder in " << cloud->size() << " points.";
+    // Init
+    MyPointcloud::Ptr pcCropped = cloud;
+    int size = cloud->size();
+    // Allocation
+    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+#ifdef VISUALIZE
+    MyPointcloud::Ptr pcVisSurfaces = boost::make_shared<MyPointcloud>();
+#endif
+	MyNormalcloud::Ptr normalsFiltered  = boost::make_shared<MyNormalcloud>();
+	MyNormalcloud::Ptr normalsCropped = boost::make_shared<MyNormalcloud>();
+
+	// Create normals
+	pcl::NormalEstimation<MyPoint, MyNormal> ne;
+	pcl::search::KdTree<MyPoint>::Ptr tree (new pcl::search::KdTree<MyPoint> ());
+	
+  	ne.setSearchMethod (tree);
+  	ne.setInputCloud (pcCropped);
+  	ne.setKSearch (50);
+  	ne.compute (*normalsCropped);
+
+
+	// Create the segmentation object for the cylinder model and set all the parameters
+	pcl::SACSegmentationFromNormals<MyPoint, MyNormal> seg;
+	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+	pcl::ExtractIndices<MyPoint> extract;
+	pcl::ExtractIndices<MyNormal> extract_normals;
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+	seg.setOptimizeCoefficients (true);
+    seg.setModelType (pcl::SACMODEL_CYLINDER);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setNormalDistanceWeight (0.1);
+    seg.setMaxIterations (10000);
+    seg.setDistanceThreshold (0.003);
+    seg.setRadiusLimits (0, 1);
+
+    // Extract the planar inliers from the input cloud
+    for(int i=0; i<numSurfaces && pcCropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
+
+        // Segment the largest planar component from the cropped cloud
+        seg.setInputCloud (pcCropped);
+  		seg.setInputNormals (normalsCropped);
+        seg.segment(*inliers, *coefficients);
+        if(inliers->indices.size() == 0 || coefficients->values.size() != 7) {
+            ROS_WARN_STREAM ("Could not estimate a model for the given pointcloud data (" << coefficients->values.size() << " coefficients)");
+            break;
+        }
+
+
+        // Extract the inliers/outliers
+        extract.setInputCloud(pcCropped);
+        extract.setIndices(inliers);
+#ifdef VISUALIZE        
+        extract.filter(*pcFiltered);
+        // Recolor the extracted pointcloud for debug visualization
+        Eigen::Vector3f color = debugColors[nextColor_++%(sizeof(debugColors)/sizeof(Eigen::Vector3f))];
+        colorPointcloud(pcFiltered, color);
+        // add newly created pointcloud in the union pointcloud
+        *pcVisSurfaces += *pcFiltered;
+#endif
+        extract.setNegative(true);
+        extract.filter(*pcFiltered);
+        pcCropped.swap(pcFiltered);
+        
+        // Extraxt normal outliers
+        extract_normals.setInputCloud(normalsCropped);
+        extract_normals.setIndices(inliers);
+        extract_normals.setNegative(true);
+        extract_normals.filter(*normalsFiltered);
+        normalsCropped.swap(normalsFiltered);
+
+        // Create plane and add points
+        //plane_.reset(new SimplePlane(coefficients->values));
+        //planeExists_ = true;
+        i++;
+        std::cout << "| " << i;
+        switch (i) {
+        case  1:  std::cout << "st"; break;
+        case  2:  std::cout << "nd"; break;
+        case  3:  std::cout << "rd"; break;
+        default:  std::cout << "th"; break;
+        }
+        std::cout << " cylinder found";
+    }
+    std::cout << std::endl;
+
+#ifdef VISUALIZE
+    // add pointcloud keyframe to the accumulated pointclouds depending on planar property
+    //pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, ... * sensorToMav_ * opticalToSensor_);
+    //pcl::transformPointCloud(*pcCropped, *pcCropped, ... * sensorToMav_ * opticalToSensor_);
+    *pcVisSurfaces_ = *pcVisSurfaces;
+    *pcVisOutliers_ = *pcCropped;
+#endif
+}
+
+
 
 
 inline void SurfaceDetection::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color)
@@ -465,27 +573,23 @@ inline int SurfaceDetection::clamp(int x, int min, int max)
 
 void SurfaceDetection::publishPointclouds()
 {
-    MyPointcloud::Ptr union_cloud = boost::make_shared<MyPointcloud>();
+    MyPointcloud::Ptr pcUnion = boost::make_shared<MyPointcloud>();
 
+
+    *pcUnion += *pcVisDebug_;
+    // transform pointcloud from optical to MAV (no optical tf published)
+    //pcl::transformPointCloud(*pcUnion, *pcUnion, ... * sensorToMav_ * opticalToSensor_);
 #ifdef VISUALIZE
-    *union_cloud += *pointcloud_planar_;
-    *union_cloud += *pointcloud_non_planar_;
+    *pcUnion += *pcVisSurfaces_;
+    *pcUnion += *pcVisOutliers_;
 #endif
-    *union_cloud += *pointcloud_debug_;
 
     // Publish debug
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*union_cloud, *msg);
+    pcl::toROSMsg(*pcUnion, *msg);
     msg->header.stamp = ros::Time::now();
     msg->header.frame_id = mavTFName_;
     pub_pc_.publish(msg);
-
-    // Publish debug
-    msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    msg->header.stamp = ros::Time::now();
-    msg->header.frame_id = "world";
-    pub_pc_.publish(msg);
-
 }
 
 void SurfaceDetection::publishPolygons()
@@ -556,8 +660,8 @@ void SurfaceDetection::configCallback(te_surface_detection::generalConfig &confi
     //maxPlanesPerCloud_ = config.maxPlanesPerCloud;
 
     // apply changes to last message
-    if (last_msg_) {
-        processMessage(last_msg_);
+    if (lastMsg_) {
+        processMessage(lastMsg_);
     }
 }
 
