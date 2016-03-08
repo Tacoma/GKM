@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   eigen_conversions
+  tf_conversions
   visualization_msgs
   lsd_slam_msgs
   dynamic_reconfigure

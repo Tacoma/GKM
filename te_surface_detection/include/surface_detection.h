@@ -10,9 +10,6 @@
 // msgs
 #include <lsd_slam_msgs/keyframeMsg.h>
 #include <lsd_slam_msgs/keyframeGraphMsg.h>
-#include <tf/transform_broadcaster.h>
-#include <tf/transform_listener.h>
-#include <tf_conversions/tf_eigen.h>
 #include <std_msgs/Bool.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Pose.h>
@@ -20,6 +17,7 @@
 #include "te_surface_detection/generalConfig.h"
 #include <dynamic_reconfigure/server.h>
 //
+#include <tf/transform_listener.h>
 #include "sophus/sim3.hpp"
 #include "plane.hpp"
 
@@ -70,13 +68,14 @@ private:
     // ROS
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
+    tf::TransformListener subTf_;
 
-    ros::Subscriber sub_keyframes_;     // lsd_slam/keyframes
-    ros::Subscriber sub_liveframes_;    // lsd_slam/liveframes
-    ros::Subscriber sub_stickToSurface_;      // gets sticking bool from joystick
-    ros::Publisher pub_pc_;     // maybe need a method to publish meshes for ros
-    ros::Publisher pub_markers_;
-    ros::Publisher pub_tf_;	// publish wall position
+    ros::Subscriber subKeyframes_;     // lsd_slam/keyframes
+    ros::Subscriber subLiveframes_;    // lsd_slam/liveframes
+    ros::Subscriber subStickToSurface_;      // gets sticking bool from joystick
+    ros::Publisher pubPc_;     // maybe need a method to publish meshes for ros
+    ros::Publisher pubMarkers_;
+    ros::Publisher pubTf_;	// publish wall position
 
 
 #ifdef VISUALIZE
@@ -84,7 +83,7 @@ private:
     MyPointcloud::Ptr pcVisSurfaces_;
     MyPointcloud::Ptr pcVisOutliers_;
 #endif
-	// in optical frame
+	// in world frame
     MyPointcloud::Ptr pcVisDebug_;
 
     // Planes
@@ -109,10 +108,13 @@ private:
     int nextColor_;
     lsd_slam_msgs::keyframeMsgConstPtr lastMsg_;
     unsigned int lastFrameId_;
+    
+    // Transforms
     Sophus::Sim3f lastPose_;
     Sophus::Sim3f currentPose_;
     Eigen::Matrix4f opticalToSensor_;
     Eigen::Affine3f sensorToMav_;
+    Eigen::Affine3f mavToWorld_;
     std::string mavTFName_;
     
     int status;

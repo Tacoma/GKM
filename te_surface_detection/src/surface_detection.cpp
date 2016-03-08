@@ -11,6 +11,9 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 
+#include <tf_conversions/tf_eigen.h>
+#include <tf/transform_broadcaster.h>
+
 #include <geometry_msgs/PolygonStamped.h>
 #include <visualization_msgs/MarkerArray.h>
 //#include <jsk_recognition_msgs/PolygonArray.h>
@@ -44,7 +47,7 @@ SurfaceDetection::SurfaceDetection() :
     distanceThreshold_(0.003),
     windowSize_(640),
     windowPosY_(0),
-    minPointsForEstimation_(3),
+    minPointsForEstimation_(20),
     noisePercentage_(0),
     maxPlanesPerCloud_(1)
 {
@@ -52,12 +55,12 @@ SurfaceDetection::SurfaceDetection() :
     private_nh_ = ros::NodeHandle("~");
 
     // subscriber and publisher
-    sub_keyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessage, this);
-    sub_liveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);
-    sub_stickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
-    pub_pc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
-    //pub_markers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pub_tf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
+    subKeyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessage, this);
+    subLiveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);
+    subStickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
+    pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
+    //pubMarkers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
+    pubTf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
 
     //ros param
     private_nh_.param("mavTFName", mavTFName_, std::string("world"));
@@ -144,14 +147,14 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
                 // Search in small window
                 getProcessWindow(min, max, windowSize_, windowPosY_, msg->width, msg->height);
                 processPointcloud(msg, cloud, min, max);
-                findPlanes(cloud, 1);
+                findCylinder(cloud, 1);
             }
 
             // We don't want to call refine Plane for the same message
             else {
                 // Transform and refine the plane with new inliers, searching in whole pointcloud
                 processPointcloud(msg, cloud);
-                refinePlane(cloud);
+                //refinePlane(cloud);
 
                 //publish plane
                 publishPlane();
@@ -183,12 +186,28 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
     processPointcloud(msg, cloud, Eigen::Vector2i(0,0), Eigen::Vector2i(msg->width, msg->height));
 }
 
+
 void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg,
                                       MyPointcloud::Ptr cloud,
                                       Eigen::Vector2i min,
                                       Eigen::Vector2i max)
 {
+    // get lsd_slam pose estimate
     memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
+    
+    // get ground_truth pose
+    try {
+    ros::Time now = ros::Time::now();
+	tf::StampedTransform tf;
+	subTf_.waitForTransform("/world", mavTFName_, now, ros::Duration(0.5));
+	subTf_.lookupTransform("/world", mavTFName_, now, tf);
+	Eigen::Affine3d temp;
+	tf::transformTFToEigen(tf, temp);
+	mavToWorld_ = temp.cast<float>();
+    }
+    catch (tf::TransformException ex) {
+	ROS_ERROR("%s",ex.what());
+    }
 
     float fxi = 1.0/msg->fx;
     float fyi = 1.0/msg->fy;
@@ -278,69 +297,6 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
 }
 
 
-
-void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
-{
-    // Init
-    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
-
-    // Create the planar model and set all the parameters
-    pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
-    pcl::ExtractIndices<MyPoint> extract;
-    boost::shared_ptr<std::vector<int> > inliers = boost::make_shared<std::vector<int> >();
-    model->setInputCloud(cloud);
-
-
-    Eigen::VectorXf coefficients, coefficients_refined;
-    Eigen::Matrix4f transform = currentPose_.matrix().inverse() * lastPose_.matrix();
-
-    // Transform plane into new frame and get coefficients
-    plane_->transform(transform);
-    coefficients = plane_->getCoefficients();
-
-    // Find inliers of the plane, and
-    model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
-
-    // Refit the plane with new points only, if enough points were found.
-    if(inliers->size() >= minPointsForEstimation_) {
-        model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
-
-        // Get the updated inlier points and save the updated Coefficients
-        if(coefficients_refined.size() == 4) {
-            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers); //TODO: rm debug code
-            plane_->setCoefficients(coefficients_refined);
-            if (status != 0) {
-                std::cout << "Refining Plane..." << "Ok.";
-                status = 0;
-                std::cout << std::endl;
-            }
-        } else {
-            if (status != 1) {
-                std::cout  << "Refining Plane..." << " Could not find a refinement!" << std::endl;
-                status = 1;
-            }
-            return;
-        }
-    } else {
-        if (status != 2) {
-            std::cout  << "Refining Plane..." << " (" << inliers->size() << "/"
-                       << cloud->size() << ") Not enough points!" << std::endl;
-            status = 2;
-        }
-        return;
-    }
-
-    // Extract the inliers	//TODO: rm debug code
-    extract.setInputCloud(cloud);
-    extract.setIndices(inliers);
-    extract.setNegative(false);
-    extract.filter(*pcFiltered);  
-
-    *pcVisDebug_ += *pcFiltered;
-}
-
-
-
 /**
  * looks for numSurfaces planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
@@ -413,19 +369,77 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    tf::TransformListener listener;
-    tf::StampedTransform transform;
-    try {  listener.lookupTransform(mavTFName_, "/world", ros::Time::now(), transform);  }
-    catch (tf::TransformException ex){  ROS_ERROR("%s",ex.what());  }
-    Eigen::Affine3d mavToWorld;
-	tf::transformTFToEigen(transform, mavToWorld);
-    //pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld * sensorToMav_ * opticalToSensor_);
-    //pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld* sensorToMav_ * opticalToSensor_);
+    
+
+    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     *pcVisSurfaces_ = *pcVisSurfaces;
     *pcVisOutliers_ = *pcCropped;
 #endif
 }
-// -------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
+{
+    // Init
+    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+
+    // Create the planar model and set all the parameters
+    pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
+    pcl::ExtractIndices<MyPoint> extract;
+    boost::shared_ptr<std::vector<int> > inliers = boost::make_shared<std::vector<int> >();
+    model->setInputCloud(cloud);
+
+
+    Eigen::VectorXf coefficients, coefficients_refined;
+    Eigen::Matrix4f transform = currentPose_.matrix().inverse() * lastPose_.matrix();
+
+    // Transform plane into new frame and get coefficients
+    plane_->transform(transform);
+    coefficients = plane_->getCoefficients();
+
+    // Find inliers of the plane, and
+    model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
+
+    // Refit the plane with new points only, if enough points were found.
+    if(inliers->size() >= minPointsForEstimation_) {
+        model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
+
+        // Get the updated inlier points and save the updated Coefficients
+        if(coefficients_refined.size() == 4) {
+            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers); //TODO: rm debug code
+            plane_->setCoefficients(coefficients_refined);
+            if (status != 0) {
+                std::cout << "Refining Plane..." << "Ok.";
+                status = 0;
+                std::cout << std::endl;
+            }
+        } else {
+            if (status != 1) {
+                std::cout  << "Refining Plane..." << " Could not find a refinement!" << std::endl;
+                status = 1;
+            }
+            return;
+        }
+    } else {
+        if (status != 2) {
+            std::cout  << "Refining Plane..." << " (" << inliers->size() << "/"
+                       << cloud->size() << ") Not enough points!" << std::endl;
+            status = 2;
+        }
+        return;
+    }
+
+    // Extract the inliers	//TODO: rm debug code
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*pcFiltered);
+    
+    // transform pointcloud from optical to world
+    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    *pcVisDebug_ += *pcFiltered;
+}
 
 
 /**
@@ -522,14 +536,15 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    //pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, ... * sensorToMav_ * opticalToSensor_);
-    //pcl::transformPointCloud(*pcCropped, *pcCropped, ... * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     *pcVisSurfaces_ = *pcVisSurfaces;
     *pcVisOutliers_ = *pcCropped;
 #endif
 }
 
 
+// -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 inline void SurfaceDetection::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color)
@@ -575,10 +590,8 @@ void SurfaceDetection::publishPointclouds()
 {
     MyPointcloud::Ptr pcUnion = boost::make_shared<MyPointcloud>();
 
-
     *pcUnion += *pcVisDebug_;
-    // transform pointcloud from optical to MAV (no optical tf published)
-    //pcl::transformPointCloud(*pcUnion, *pcUnion, ... * sensorToMav_ * opticalToSensor_);
+    
 #ifdef VISUALIZE
     *pcUnion += *pcVisSurfaces_;
     *pcUnion += *pcVisOutliers_;
@@ -588,8 +601,8 @@ void SurfaceDetection::publishPointclouds()
     sensor_msgs::PointCloud2::Ptr msg = boost::make_shared<sensor_msgs::PointCloud2>();
     pcl::toROSMsg(*pcUnion, *msg);
     msg->header.stamp = ros::Time::now();
-    msg->header.frame_id = mavTFName_;
-    pub_pc_.publish(msg);
+    msg->header.frame_id = "/world";
+    pubPc_.publish(msg);
 }
 
 void SurfaceDetection::publishPolygons()
@@ -613,7 +626,7 @@ void SurfaceDetection::publishPolygons()
 //         }
 //         markers.polygons.push_back(polyStamped);
 //     }
-//     pub_markers_.publish(markers);
+//     pubMarkers_.publish(markers);
 }
 
 void SurfaceDetection::publishPlane()
@@ -638,7 +651,7 @@ void SurfaceDetection::publishPlane()
     tf.transform.rotation.y = plane_rot.y();
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
-    pub_tf_.publish(tf);
+    pubTf_.publish(tf);
 }
 
 
@@ -664,6 +677,9 @@ void SurfaceDetection::configCallback(te_surface_detection::generalConfig &confi
         processMessage(lastMsg_);
     }
 }
+
+
+
 
 
 int main(int argc, char** argv)
