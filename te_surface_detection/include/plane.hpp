@@ -16,38 +16,20 @@
 #include <Eigen/Core>
 #include <boost/shared_ptr.hpp>
 #include "sophus/sim3.hpp"
+#include "typedef.h"
 
 
 
-
-typedef Eigen::Hyperplane<float, 3> EigenPlane;
-
-typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::Normal MyNormal;
-
-class MyPointcloud : public pcl::PointCloud<MyPoint>
-{
-public:
-    typedef boost::shared_ptr<MyPointcloud> Ptr;
-    int id;
-};
-
-class MyNormalcloud : public pcl::PointCloud<MyNormal>
-{
-public:
-    typedef boost::shared_ptr<MyNormalcloud> Ptr;
-};
-
-typedef unsigned char uchar;
-//typedef pcl::PointCloud<MyPoint> MyPointcloud;
-
-// ------------------------- SimplePlane -------------------------
-class SimplePlane {
+// ------------------------- Plane -------------------------
+class Plane {
+    
+private:
+    typedef Eigen::Hyperplane<float, 3> EigenPlane;
 
 public:
-    typedef boost::shared_ptr<SimplePlane> Ptr;
+    typedef boost::shared_ptr<Plane> Ptr;
 
-    SimplePlane(std::vector<float> coefficients) 
+    Plane(std::vector<float> coefficients) 
     {
         if (coefficients.size() != 4) {
             ROS_ERROR("Plane with wrong number of coefficients created");

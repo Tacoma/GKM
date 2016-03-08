@@ -127,7 +127,7 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
     reset();
     searchPlane_ = msg->data;
     if (lastMsg_) {
-		processMessage(lastMsg_);
+        processMessage(lastMsg_);
     }
 }
 
@@ -154,19 +154,19 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
             else {
                 // Transform and refine the plane with new inliers, searching in whole pointcloud
                 processPointcloud(msg, cloud);
-                //refinePlane(cloud);
+                refineCylinder(cloud);
 
                 //publish plane
-                publishPlane();
+                //publishPlane();
             }
 
             // rememember pose for plane transformation
             lastPose_ = currentPose_;
-	    
-	    publishPointclouds();
+
+            publishPointclouds();
         }
-        
-    // !isKeyframe
+
+        // !isKeyframe
     } else {
         // check for reset
         if (lastFrameId_ > msg->id) {
@@ -188,25 +188,25 @@ void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPt
 
 
 void SurfaceDetection::processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg,
-                                      MyPointcloud::Ptr cloud,
-                                      Eigen::Vector2i min,
-                                      Eigen::Vector2i max)
+        MyPointcloud::Ptr cloud,
+        Eigen::Vector2i min,
+        Eigen::Vector2i max)
 {
     // get lsd_slam pose estimate
     memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
-    
+
     // get ground_truth pose
     try {
-    ros::Time now = ros::Time::now();
-	tf::StampedTransform tf;
-	subTf_.waitForTransform("/world", mavTFName_, now, ros::Duration(0.5));
-	subTf_.lookupTransform("/world", mavTFName_, now, tf);
-	Eigen::Affine3d temp;
-	tf::transformTFToEigen(tf, temp);
-	mavToWorld_ = temp.cast<float>();
+        ros::Time now = ros::Time::now();
+        tf::StampedTransform tf;
+        subTf_.waitForTransform("/world", mavTFName_, now, ros::Duration(0.5));
+        subTf_.lookupTransform("/world", mavTFName_, now, tf);
+        Eigen::Affine3d temp;
+        tf::transformTFToEigen(tf, temp);
+        mavToWorld_ = temp.cast<float>();
     }
     catch (tf::TransformException ex) {
-	ROS_ERROR("%s",ex.what());
+        ROS_ERROR("%s",ex.what());
     }
 
     float fxi = 1.0/msg->fx;
@@ -353,15 +353,23 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
         pcCropped.swap(pcFiltered);
 
         // Create plane and add points
-        plane_.reset(new SimplePlane(coefficients->values));
+        plane_.reset(new Plane(coefficients->values));
         planeExists_ = true;
         i++;
         std::cout << "| " << i;
         switch (i) {
-        case  1:  std::cout << "st"; break;
-        case  2:  std::cout << "nd"; break;
-        case  3:  std::cout << "rd"; break;
-        default:  std::cout << "th"; break;
+        case  1:
+            std::cout << "st";
+            break;
+        case  2:
+            std::cout << "nd";
+            break;
+        case  3:
+            std::cout << "rd";
+            break;
+        default:
+            std::cout << "th";
+            break;
         }
         std::cout << " plane found";
     }
@@ -369,7 +377,7 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    
+
 
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
@@ -377,6 +385,7 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
     *pcVisOutliers_ = *pcCropped;
 #endif
 }
+
 
 
 void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
@@ -435,7 +444,7 @@ void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
     extract.setIndices(inliers);
     extract.setNegative(false);
     extract.filter(*pcFiltered);
-    
+
     // transform pointcloud from optical to world
     pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
     *pcVisDebug_ += *pcFiltered;
@@ -457,26 +466,26 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
 #ifdef VISUALIZE
     MyPointcloud::Ptr pcVisSurfaces = boost::make_shared<MyPointcloud>();
 #endif
-	MyNormalcloud::Ptr normalsFiltered  = boost::make_shared<MyNormalcloud>();
-	MyNormalcloud::Ptr normalsCropped = boost::make_shared<MyNormalcloud>();
+    MyNormalcloud::Ptr normalsFiltered  = boost::make_shared<MyNormalcloud>();
+    MyNormalcloud::Ptr normalsCropped = boost::make_shared<MyNormalcloud>();
 
-	// Create normals
-	pcl::NormalEstimation<MyPoint, MyNormal> ne;
-	pcl::search::KdTree<MyPoint>::Ptr tree (new pcl::search::KdTree<MyPoint> ());
-	
-  	ne.setSearchMethod (tree);
-  	ne.setInputCloud (pcCropped);
-  	ne.setKSearch (50);
-  	ne.compute (*normalsCropped);
+    // Create normals
+    pcl::NormalEstimation<MyPoint, MyNormal> ne;
+    pcl::search::KdTree<MyPoint>::Ptr tree (new pcl::search::KdTree<MyPoint> ());
+
+    ne.setSearchMethod (tree);
+    ne.setInputCloud (pcCropped);
+    ne.setKSearch (50);
+    ne.compute (*normalsCropped);
 
 
-	// Create the segmentation object for the cylinder model and set all the parameters
-	pcl::SACSegmentationFromNormals<MyPoint, MyNormal> seg;
-	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-	pcl::ExtractIndices<MyPoint> extract;
-	pcl::ExtractIndices<MyNormal> extract_normals;
+    // Create the segmentation object for the cylinder model and set all the parameters
+    pcl::SACSegmentationFromNormals<MyPoint, MyNormal> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::ExtractIndices<MyPoint> extract;
+    pcl::ExtractIndices<MyNormal> extract_normals;
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-	seg.setOptimizeCoefficients (true);
+    seg.setOptimizeCoefficients (true);
     seg.setModelType (pcl::SACMODEL_CYLINDER);
     seg.setMethodType (pcl::SAC_RANSAC);
     seg.setNormalDistanceWeight (0.1);
@@ -489,7 +498,7 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
 
         // Segment the largest planar component from the cropped cloud
         seg.setInputCloud (pcCropped);
-  		seg.setInputNormals (normalsCropped);
+        seg.setInputNormals (normalsCropped);
         seg.segment(*inliers, *coefficients);
         if(inliers->indices.size() == 0 || coefficients->values.size() != 7) {
             ROS_WARN_STREAM ("Could not estimate a model for the given pointcloud data (" << coefficients->values.size() << " coefficients)");
@@ -500,7 +509,7 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
         // Extract the inliers/outliers
         extract.setInputCloud(pcCropped);
         extract.setIndices(inliers);
-#ifdef VISUALIZE        
+#ifdef VISUALIZE
         extract.filter(*pcFiltered);
         // Recolor the extracted pointcloud for debug visualization
         Eigen::Vector3f color = debugColors[nextColor_++%(sizeof(debugColors)/sizeof(Eigen::Vector3f))];
@@ -511,7 +520,7 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
         extract.setNegative(true);
         extract.filter(*pcFiltered);
         pcCropped.swap(pcFiltered);
-        
+
         // Extraxt normal outliers
         extract_normals.setInputCloud(normalsCropped);
         extract_normals.setIndices(inliers);
@@ -519,16 +528,24 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
         extract_normals.filter(*normalsFiltered);
         normalsCropped.swap(normalsFiltered);
 
-        // Create plane and add points
-        //plane_.reset(new SimplePlane(coefficients->values));
-        //planeExists_ = true;
+        // Create cylinder and add points
+        cylinder_.reset(new Cylinder(coefficients->values));
+        planeExists_ = true;
         i++;
         std::cout << "| " << i;
         switch (i) {
-        case  1:  std::cout << "st"; break;
-        case  2:  std::cout << "nd"; break;
-        case  3:  std::cout << "rd"; break;
-        default:  std::cout << "th"; break;
+        case  1:
+            std::cout << "st";
+            break;
+        case  2:
+            std::cout << "nd";
+            break;
+        case  3:
+            std::cout << "rd";
+            break;
+        default:
+            std::cout << "th";
+            break;
         }
         std::cout << " cylinder found";
     }
@@ -539,8 +556,82 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     *pcVisSurfaces_ = *pcVisSurfaces;
-    *pcVisOutliers_ = *pcCropped;
+    //*pcVisOutliers_ = *pcCropped;
 #endif
+}
+
+
+void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
+{
+    // Init
+    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+
+    // Create the cylinder model and set all the parameters
+    pcl::SampleConsensusModelCylinder<MyPoint, MyNormal>::Ptr model = boost::make_shared<pcl::SampleConsensusModelCylinder<MyPoint, MyNormal> >(cloud);
+    model->setInputCloud(cloud);
+    
+    // Create normals
+    pcl::NormalEstimation<MyPoint, MyNormal> ne;
+    pcl::search::KdTree<MyPoint>::Ptr tree (new pcl::search::KdTree<MyPoint> ());
+    MyNormalcloud::Ptr normals = boost::make_shared<MyNormalcloud>();
+    ne.setSearchMethod (tree);
+    ne.setInputCloud (cloud);
+    ne.setKSearch (50);
+    ne.compute (*normals);
+    model->setInputNormals(normals);
+    
+    // Init debug visualization
+    pcl::ExtractIndices<MyPoint> extract;
+    boost::shared_ptr<std::vector<int> > inliers = boost::make_shared<std::vector<int> >();
+
+    // Get coefficients
+    Eigen::VectorXf coefficients, coefficients_refined;
+    Eigen::Matrix4f transform = currentPose_.matrix().inverse() * lastPose_.matrix();
+    // Transform cylinder into new frame
+    cylinder_->transform(transform);
+    coefficients = cylinder_->getCoefficients();
+
+    // Find inliers of the cylinder, and...
+    model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
+
+    // ...refit the cylinder with new points only, if enough points were found.
+    if(inliers->size() >= minPointsForEstimation_) {
+        model->optimizeModelCoefficients(*inliers, coefficients, coefficients_refined);
+
+        // Get the updated inlier points and save the updated Coefficients
+        if(coefficients_refined.size() == 7) {
+            model->selectWithinDistance(coefficients_refined, distanceThreshold_,*inliers); //TODO: rm debug code
+            cylinder_->setCoefficients(coefficients_refined);
+            if (status != 0) {
+                std::cout << "Refining Cylinder..." << "Ok.";
+                status = 0;
+                std::cout << std::endl;
+            }
+        } else {
+            if (status != 1) {
+                std::cout  << "Refining Cylinder..." << " Could not find a refinement!" << std::endl;
+                status = 1;
+            }
+            return;
+        }
+    } else {
+        if (status != 2) {
+            std::cout  << "Refining Cylinder..." << " (" << inliers->size() << "/"
+                       << cloud->size() << ") Not enough points!" << std::endl;
+            status = 2;
+        }
+        return;
+    }
+
+    // Extract the inliers	//TODO: rm debug code
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*pcFiltered);
+
+    // transform pointcloud from optical to world
+    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    *pcVisDebug_ += *pcFiltered;
 }
 
 
@@ -591,7 +682,7 @@ void SurfaceDetection::publishPointclouds()
     MyPointcloud::Ptr pcUnion = boost::make_shared<MyPointcloud>();
 
     *pcUnion += *pcVisDebug_;
-    
+
 #ifdef VISUALIZE
     *pcUnion += *pcVisSurfaces_;
     *pcUnion += *pcVisOutliers_;

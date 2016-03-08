@@ -20,6 +20,7 @@
 #include <tf/transform_listener.h>
 #include "sophus/sim3.hpp"
 #include "plane.hpp"
+#include "cylinder.hpp"
 
 #define VISUALIZE // debug visualization
 
@@ -43,9 +44,11 @@ private:
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud,
                            Eigen::Vector2i min, Eigen::Vector2i max);
-    void refinePlane(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
+    void refinePlane(MyPointcloud::Ptr cloud);
     void findCylinder(MyPointcloud::Ptr cloud, unsigned int num_cylinders=1);
+    void refineCylinder(MyPointcloud::Ptr cloud);
+    
     void publishPointclouds();
     void publishPolygons();
     void publishPlane();
@@ -57,7 +60,6 @@ private:
 				 int width, int height);
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
-
     void configCallback(te_surface_detection::generalConfig &config, uint32_t level);
 
 
@@ -87,9 +89,10 @@ private:
     MyPointcloud::Ptr pcVisDebug_;
 
     // Planes
-    SimplePlane::Ptr plane_;
+    Plane::Ptr plane_;
     bool searchPlane_;
     bool planeExists_;
+    Cylinder::Ptr cylinder_;
 
     // Parameters
     dynamic_reconfigure::Server<te_surface_detection::generalConfig> server_;
