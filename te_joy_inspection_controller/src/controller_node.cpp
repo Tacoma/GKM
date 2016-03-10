@@ -94,7 +94,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     }
     
     if (!is_active_) {
-	return;
+        return;
     }
     is_active_ = false;
 
@@ -157,7 +157,7 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
     // enable or disable sticking to the plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1] && !stick_to_plane_) {
         stick_to_plane_ = true;
-	is_active_ = true;
+        is_active_ = true;
 
         // set current distance to surface as sticking distance
         Eigen::Vector3f plane_pos = Eigen::Vector3f( plane_tf_.getOrigin().x(), plane_tf_.getOrigin().y(), plane_tf_.getOrigin().z() );

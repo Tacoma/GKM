@@ -215,9 +215,12 @@ void processPointcloudMsg(const boost::shared_ptr<const sensor_msgs::PointCloud2
 
     // reset viewer
 //    viewer_ = rgbVis(point_cloud_ptr_);
-    viewer_->removePointCloud();
+    viewer_->removePointCloud("cloud");
+    viewer_->removePointCloud("normals");
+
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(point_cloud_ptr_);
     viewer_->addPointCloud<pcl::PointXYZRGB>(point_cloud_ptr_, rgb, "cloud");
+    viewer_->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cloud");
     viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (point_cloud_ptr_, cloud_normals, 10, 0.05, "normals");
 }
 
