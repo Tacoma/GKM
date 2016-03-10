@@ -28,11 +28,11 @@ public:
     Cylinder(std::vector<float> coefficients) 
     {
         if (coefficients.size() != 7) {
-            ROS_ERROR("Plane with wrong number of coefficients created");
+            ROS_ERROR("Cylinder with wrong number of coefficients created");
 	    return;
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
-	//dir_
+	dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
 	radius_ = coefficients[6];
     }
 
@@ -46,11 +46,11 @@ public:
     void setCoefficients(const Eigen::VectorXf coefficients) 
     {
         if (coefficients.size() != 7) {
-	    ROS_ERROR("Plane with wrong number of coefficients created");
+	    ROS_ERROR("Cylinder with wrong number of coefficients created");
             return;
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
-	//dir_
+	dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
 	radius_ = coefficients[6];
     }
 
@@ -63,6 +63,26 @@ public:
     {
         point_ = transform * point_;
         dir_ = transform * dir_;
+    }
+    
+    static void transformCylinder(const Eigen::Matrix4f transform, Eigen::VectorXf &coefficients) {
+        if (coefficients.size() != 7) {
+	    ROS_ERROR("Cylinder with wrong number of coefficients transformed");
+            return;
+        }
+	Eigen::Vector4f point(coefficients[0], coefficients[1], coefficients[2], 1);
+	Eigen::Vector4f dir(coefficients[3], coefficients[4], coefficients[5], 0);
+	float radius = coefficients[6];
+	
+	point = transform * point;
+        dir = transform * dir;
+	//radius = transform.scale() *radius;
+	
+	for (int i=0; i<4; i++) {
+	    coefficients[i] = point[i];
+	    coefficients[i+3] = dir[i];
+	}
+	coefficients[6] = radius;
     }
     
     // returns closest point to point_in on the plane

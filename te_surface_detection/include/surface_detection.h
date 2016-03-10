@@ -39,6 +39,7 @@ public:
     ~SurfaceDetection();
 
 private:
+    void update(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
     void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
     void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
@@ -52,6 +53,7 @@ private:
     void publishPointclouds();
     void publishPolygons();
     void publishPlane();
+    void publishCylinder();
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
@@ -78,6 +80,7 @@ private:
     ros::Publisher pubPc_;     // maybe need a method to publish meshes for ros
     ros::Publisher pubMarkers_;
     ros::Publisher pubTf_;	// publish wall position
+    ros::Publisher pubCylinder_;
 
 
 #ifdef VISUALIZE
@@ -90,8 +93,9 @@ private:
 
     // Planes
     Plane::Ptr plane_;
-    bool searchPlane_;
-    bool planeExists_;
+    int surfaceType_; // 1 = plane, 2 = cylinder
+    bool searchSurface_;
+    bool surfaceExists_;
     Cylinder::Ptr cylinder_;
 
     // Parameters

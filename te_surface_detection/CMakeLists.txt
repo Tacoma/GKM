@@ -33,9 +33,7 @@ include_directories(
 #  ${Eigen_INCLUDE_DIRS}
 )
 
-add_executable(${PROJECT_NAME} src/surface_detection.cpp
-			       # src/bspline_fitting.cpp
-)
+add_executable(${PROJECT_NAME}  src/surface_detection.cpp)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg)
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 

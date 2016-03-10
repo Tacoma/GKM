@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 project(pcl_visualizer_viewports)
 
 find_package(catkin REQUIRED COMPONENTS
-  PCL	#PCL 1.2 REQUIRED
+  PCL #PCL 1.2 REQUIRED
   roscpp
   tf
   sensor_msgs

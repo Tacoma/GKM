@@ -82,7 +82,7 @@ public:
         calculateParameterForm(point, normal);
     }
 
-    void transformPlane(const Eigen::Matrix4f &transform, Eigen::Vector3f &point_inout, Eigen::Vector3f &normal_inout) 
+    static void transformPlane(const Eigen::Matrix4f &transform, Eigen::Vector3f &point_inout, Eigen::Vector3f &normal_inout) 
     {
         Eigen::Vector4f normal_hom(normal_inout[0], normal_inout[1], normal_inout[2], 0);
         Eigen::Vector4f point_hom(point_inout[0], point_inout[1], point_inout[2], 1);
