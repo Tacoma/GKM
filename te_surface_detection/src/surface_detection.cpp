@@ -137,21 +137,21 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
 }
 
 void SurfaceDetection::update(const lsd_slam_msgs::keyframeMsgConstPtr msg)
-{
-    // rememember pose
-    lastPose_ = currentPose_;
-    
+{    
     memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     if (cylinder_) {
         // Transform cylinder into new frame
-//        cylinder_->transform(lastToCurrent);
+        cylinder_->transform(lastToCurrent);
     }
     if (plane_) {
         // Transform plane into new frame
         plane_->transform(lastToCurrent);
-    }	
+    }
+
+    // rememember pose
+    lastPose_ = currentPose_;
 }
 
 void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
@@ -187,9 +187,10 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
                     refinePlane(cloud);
                 }
                 if (surfaceType_ == 2) {
-                    //refineCylinder(cloud);
+//                    refineCylinder(cloud);
                 }
             }
+
             publishPointclouds();
         }
     // !isKeyframe
@@ -558,6 +559,12 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
 
         // Create cylinder and add points
         cylinder_.reset(new Cylinder(coefficients->values));
+        // DEBUG
+        std::cout << "Coefficients: ";
+        for(int c=0; c<7; c++)
+            std::cout << coefficients->values[c] << ", ";
+        std::cout << std::endl;
+
         surfaceExists_ = true;
         i++;
         std::cout << "| " << i;
@@ -810,14 +817,14 @@ void SurfaceDetection::publishCylinder()
 //    marker.action = visualization_msgs::Marker::ADD;
     Eigen::VectorXf coefficients = cylinder_->getCoefficients();
     Cylinder::transformCylinder(mavToWorld_ * sensorToMav_ * opticalToSensor_, coefficients);
-//    Eigen::Quaternionf cylinder_rot = cylinder_->getRotation();
+    Eigen::Quaternionf cylinder_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), Eigen::Vector3f(coefficients[3], coefficients[4], coefficients[5])).normalized();
     marker.pose.position.x = coefficients[0];
     marker.pose.position.y = coefficients[1];
     marker.pose.position.z = coefficients[2];
-    marker.pose.orientation.x = coefficients[4]; //cylinder_rot.x();
-    marker.pose.orientation.y = coefficients[3]; //cylinder_rot.y();
-    marker.pose.orientation.z = coefficients[5]; //cylinder_rot.z();
-    marker.pose.orientation.w = 1.0f;            //cylinder_rot.w();
+    marker.pose.orientation.x = cylinder_rot.x();
+    marker.pose.orientation.y = cylinder_rot.y();
+    marker.pose.orientation.z = cylinder_rot.z();
+    marker.pose.orientation.w = cylinder_rot.w();
     marker.scale.x = coefficients[6];
     marker.scale.y = coefficients[6];
     marker.scale.z = coefficients[6];
@@ -833,7 +840,7 @@ void SurfaceDetection::publishCylinder()
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(coefficients[0], coefficients[1], coefficients[2]));
     transform.setRotation(tf::Quaternion(marker.pose.orientation.x, marker.pose.orientation.y, marker.pose.orientation.z, marker.pose.orientation.w));
-    tf_br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), mavTFName_, "cylinder"));
+    tf_br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "cylinder"));
 }
 
 

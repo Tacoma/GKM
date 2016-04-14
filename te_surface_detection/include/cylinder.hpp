@@ -33,7 +33,7 @@ public:
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
         dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
-        radius_ = coefficients[6];
+        radius_ = 2.0f * coefficients[6];
     }
 
     Eigen::VectorXf getCoefficients() 
@@ -54,10 +54,9 @@ public:
         radius_ = coefficients[6];
     }
 
-    // TODO
     Eigen::Quaternionf getRotation()
     {
-        return Eigen::Quaternionf(1.0f, dir_.y(), dir_.x(), dir_.z()).normalized();
+        return Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0.0f,0.0f,1.0f), Eigen::Vector3f(dir_.x(), dir_.y(), dir_.z())).normalized();
     }
 
     void transform(const Eigen::Matrix4f &transform) 
@@ -80,7 +79,7 @@ public:
 
         Sophus::Sim3f scaleTransform;
         memcpy(scaleTransform.data(), transform.data(), 7*sizeof(float));
-        radius = scaleTransform.scale() * 2.0f * radius;
+        radius = scaleTransform.scale() * radius;
 	
         for (int i=0; i<3; i++) {
             coefficients[i] = point[i];
