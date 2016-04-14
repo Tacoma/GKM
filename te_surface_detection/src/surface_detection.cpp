@@ -51,7 +51,7 @@ SurfaceDetection::SurfaceDetection() :
     minPointsForEstimation_(20),
     noisePercentage_(0),
     maxPlanesPerCloud_(1),
-    surfaceType_(1)
+    surfaceType_(2)
 {
     nh_ = ros::NodeHandle("");
     private_nh_ = ros::NodeHandle("~");
@@ -117,6 +117,7 @@ void SurfaceDetection::reset()
 #endif
 
     plane_.reset();
+    cylinder_.reset();
     searchSurface_ = false;
     surfaceExists_ = false;
     status = -1;
@@ -144,14 +145,13 @@ void SurfaceDetection::update(const lsd_slam_msgs::keyframeMsgConstPtr msg)
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     if (cylinder_) {
-	// Transform cylinder into new frame
-	cylinder_->transform(lastToCurrent);
+        // Transform cylinder into new frame
+//        cylinder_->transform(lastToCurrent);
     }
     if (plane_) {
-	// Transform cylinder into new frame
-	plane_->transform(lastToCurrent);
-    }
-	
+        // Transform plane into new frame
+        plane_->transform(lastToCurrent);
+    }	
 }
 
 void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
@@ -172,24 +172,23 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
                 // Search in small window
                 getProcessWindow(min, max, windowSize_, windowPosY_, msg->width, msg->height);
                 processPointcloud(msg, cloud, min, max);
-		if (surfaceType_ == 1) {
-		    findPlanes(cloud, 1);
-		}
-		if (surfaceType_ == 2) {
-		    findCylinder(cloud, 1);
-		}
+                if (surfaceType_ == 1) {
+                    findPlanes(cloud, 1);
+                }
+                if (surfaceType_ == 2) {
+                    findCylinder(cloud, 1);
+                }
             }
-
             // We don't want to call refine Plane for the same message
             else {
                 // Transform and refine the plane with new inliers, searching in whole pointcloud
                 processPointcloud(msg, cloud);
-		if (surfaceType_ == 1) {
-		    refinePlane(cloud);
-		}
-		if (surfaceType_ == 2) {
-		    //refineCylinder(cloud);
-		}
+                if (surfaceType_ == 1) {
+                    refinePlane(cloud);
+                }
+                if (surfaceType_ == 2) {
+                    //refineCylinder(cloud);
+                }
             }
             publishPointclouds();
         }
@@ -518,9 +517,9 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
     seg.setModelType (pcl::SACMODEL_CYLINDER);
     seg.setMethodType (pcl::SAC_RANSAC);
     seg.setNormalDistanceWeight (0.1);
-    seg.setMaxIterations (10000);
-    seg.setDistanceThreshold (0.003);
-    seg.setRadiusLimits (0, 1);
+    seg.setMaxIterations (100); //10000
+    seg.setDistanceThreshold (0.05); //0.003
+    seg.setRadiusLimits (0, 0.5);
 
     // Extract the planar inliers from the input cloud
     for(int i=0; i<numSurfaces && pcCropped->size() > std::max(noisePercentage_*size, (float)minPointsForEstimation_) ; i++) {
@@ -803,30 +802,38 @@ void SurfaceDetection::publishCylinder()
 {
     if (!cylinder_) { return; }
     visualization_msgs::Marker marker;
-    marker.header.frame_id = mavTFName_;
+    marker.header.frame_id = "world"; //mavTFName_;
     marker.header.stamp = ros::Time::now();
-    //marker.ns = "basic_shapes" + boost::lexical_cast<std::string>(it);
+//    marker.ns = "basic_shapes" + boost::lexical_cast<std::string>(it);
     marker.id = 0;
     marker.type = visualization_msgs::Marker::CYLINDER;
-    //marker.action = visualization_msgs::Marker::ADD;
+//    marker.action = visualization_msgs::Marker::ADD;
     Eigen::VectorXf coefficients = cylinder_->getCoefficients();
-    Cylinder::transformCylinder( sensorToMav_ * opticalToSensor_, coefficients);
+    Cylinder::transformCylinder(mavToWorld_ * sensorToMav_ * opticalToSensor_, coefficients);
+//    Eigen::Quaternionf cylinder_rot = cylinder_->getRotation();
     marker.pose.position.x = coefficients[0];
     marker.pose.position.y = coefficients[1];
     marker.pose.position.z = coefficients[2];
-    marker.pose.orientation.x = coefficients[3];
-    marker.pose.orientation.y = coefficients[4];
-    marker.pose.orientation.z = coefficients[5];
-    marker.pose.orientation.w = 1.0;
+    marker.pose.orientation.x = coefficients[4]; //cylinder_rot.x();
+    marker.pose.orientation.y = coefficients[3]; //cylinder_rot.y();
+    marker.pose.orientation.z = coefficients[5]; //cylinder_rot.z();
+    marker.pose.orientation.w = 1.0f;            //cylinder_rot.w();
     marker.scale.x = coefficients[6];
     marker.scale.y = coefficients[6];
     marker.scale.z = coefficients[6];
     marker.color.r = 0.0f;
     marker.color.g = 1.0f;
     marker.color.b = 0.0f;
-    marker.color.a = 1.0;
+    marker.color.a = 0.8;
     marker.lifetime = ros::Duration();
     pubCylinder_.publish(marker);
+
+    // RVIZ debug
+    tf::TransformBroadcaster tf_br;
+    tf::Transform transform;
+    transform.setOrigin(tf::Vector3(coefficients[0], coefficients[1], coefficients[2]));
+    transform.setRotation(tf::Quaternion(marker.pose.orientation.x, marker.pose.orientation.y, marker.pose.orientation.z, marker.pose.orientation.w));
+    tf_br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), mavTFName_, "cylinder"));
 }
 
 

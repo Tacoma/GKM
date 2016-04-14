@@ -29,11 +29,11 @@ public:
     {
         if (coefficients.size() != 7) {
             ROS_ERROR("Cylinder with wrong number of coefficients created");
-	    return;
+            return;
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
-	dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
-	radius_ = coefficients[6];
+        dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
+        radius_ = coefficients[6];
     }
 
     Eigen::VectorXf getCoefficients() 
@@ -46,18 +46,19 @@ public:
     void setCoefficients(const Eigen::VectorXf coefficients) 
     {
         if (coefficients.size() != 7) {
-	    ROS_ERROR("Cylinder with wrong number of coefficients created");
+            ROS_ERROR("Cylinder with wrong number of coefficients created");
             return;
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
-	dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
-	radius_ = coefficients[6];
+        dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
+        radius_ = coefficients[6];
     }
 
-//     Eigen::Quaternionf getRotation() //TODO
-//     {
-// 	return Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), dir_);
-//     }
+    // TODO
+    Eigen::Quaternionf getRotation()
+    {
+        return Eigen::Quaternionf(1.0f, dir_.y(), dir_.x(), dir_.z()).normalized();
+    }
 
     void transform(const Eigen::Matrix4f &transform) 
     {
@@ -67,22 +68,25 @@ public:
     
     static void transformCylinder(const Eigen::Matrix4f transform, Eigen::VectorXf &coefficients) {
         if (coefficients.size() != 7) {
-	    ROS_ERROR("Cylinder with wrong number of coefficients transformed");
+            ROS_ERROR("Cylinder with wrong number of coefficients transformed");
             return;
         }
-	Eigen::Vector4f point(coefficients[0], coefficients[1], coefficients[2], 1);
-	Eigen::Vector4f dir(coefficients[3], coefficients[4], coefficients[5], 0);
-	float radius = coefficients[6];
+        Eigen::Vector4f point(coefficients[0], coefficients[1], coefficients[2], 1);
+        Eigen::Vector4f dir(coefficients[3], coefficients[4], coefficients[5], 0);
+        float radius = coefficients[6];
 	
-	point = transform * point;
+        point = transform * point;
         dir = transform * dir;
-	//radius = transform.scale() *radius;
+
+        Sophus::Sim3f scaleTransform;
+        memcpy(scaleTransform.data(), transform.data(), 7*sizeof(float));
+        radius = scaleTransform.scale() * 2.0f * radius;
 	
-	for (int i=0; i<4; i++) {
-	    coefficients[i] = point[i];
-	    coefficients[i+3] = dir[i];
-	}
-	coefficients[6] = radius;
+        for (int i=0; i<3; i++) {
+            coefficients[i] = point[i];
+            coefficients[i+3] = dir[i];
+        }
+        coefficients[6] = radius;
     }
     
     // returns closest point to point_in on the plane
