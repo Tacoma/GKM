@@ -65,8 +65,9 @@ public:
     void takeoffAndHover();
 
 private:
-    void processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
+    void processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
     void testPlanes();
+    void testCylinders();
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
@@ -86,9 +87,9 @@ private:
     bool goal_reached_;
     tf::Transform hover_goal_tf_;
 
-    // TODO bool isPlaneActive;
-    bool search_for_plane_;
-    bool stick_to_plane_;
+    int surfaceType_; // 1 = plane, 2 = cylinder
+    bool search_for_surface_;
+    bool stick_to_surface_;
     float sticking_distance_;
     float correction_speed_;
     tf::Transform plane_tf_;
@@ -98,11 +99,11 @@ private:
     Deadzone<float> stick_deadzone_ = Deadzone<float>(0.1f);
     bool is_active_;
 
-    // Ros parameters
+    // ros parameters
     float speedY_;      // speedRightLeft
     float speedX_;      // speedForwardBackward
     float speedZ_;      // speedUpDown
-    float speedYaw_;   // speedYaw
+    float speedYaw_;    // speedYaw
 };
 
 #endif // CONTROLLER_H_

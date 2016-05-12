@@ -60,10 +60,10 @@ public:
 
     Eigen::Quaternionf getRotation() 
     {
-	Eigen::Vector3f normal;
+        Eigen::Vector3f normal;
         Eigen::Vector3f point;
         calculateNormalForm(point, normal);
-	return Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), normal);
+        return Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), normal);
     }
 
     void transform(const Eigen::Matrix4f &transform) 
@@ -119,7 +119,6 @@ public:
         if(scalerProduct < 0){
             normal_out = -normal_out;
         }
-
     }
 
 
@@ -130,7 +129,7 @@ private:
         b_ = normal[1];
         c_ = normal[2];
 
-        d_ = - normal.dot(point);
+        d_ = -normal.dot(point);
     }
 
 

@@ -5,16 +5,15 @@
 
 #define STICK_DEADZONE 0.1f
 
-// TODO delete
-// eval
 #include <fstream>
 static std::ofstream filestream_;
 
 Controller::Controller() :
-    goal_reached_(true), 
-    search_for_plane_(false), 
-    stick_to_plane_(false), 
-    sticking_distance_(0.5f), 
+    goal_reached_(true),
+    surfaceType_(1),
+    search_for_surface_(false),
+    stick_to_surface_(false),
+    sticking_distance_(0.5f),
     correction_speed_(0.5f),
     is_active_(false)
 {
@@ -35,7 +34,8 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processPlaneMsg, this);
+    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processSurfaceMsg, this);
+    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("cylinder", 10, &Controller::processSurfaceMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("controller/stickToSurface", 10);
 
@@ -101,7 +101,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     // world transform
     tf::Transform curr_transform;
     /// stick to plane
-    if(stick_to_plane_ && goal_reached_) {
+    if(stick_to_surface_ && goal_reached_) {
         testPlanes();
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
         curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
@@ -143,20 +143,20 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
     }
     // tell SurfaceDetection to search for a plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
-        search_for_plane_ = true;
+        search_for_surface_ = true;
         std_msgs::Bool sticking;
-        sticking.data = search_for_plane_;
+        sticking.data = search_for_surface_;
         pub_stickToSurface_.publish(sticking);
     }
     if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
-        search_for_plane_ = false;
+        search_for_surface_ = false;
         std_msgs::Bool sticking;
-        sticking.data = search_for_plane_;
+        sticking.data = search_for_surface_;
         pub_stickToSurface_.publish(sticking);
     }
     // enable or disable sticking to the plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1] && !stick_to_plane_) {
-        stick_to_plane_ = true;
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_1] && !stick_to_surface_) {
+        stick_to_surface_ = true;
         is_active_ = true;
 
         // set current distance to surface as sticking distance
@@ -167,26 +167,9 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         normal.normalize();
         Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
         sticking_distance_ = -normal.dot(curr_pos-plane_pos);
-
-        // TODO delete
-        // eval
-        filestream_.open("//usr//stud//grzimek//eval.txt", std::ofstream::out);
-        if(!filestream_) {
-            std::cout << "Error: could not open file" << std::endl;
-        } else {
-            std::cout << "Writing to file..." << std::endl;
-        }
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1] && stick_to_plane_) {
-        stick_to_plane_ = false;
-
-        // TODO delete
-        // eval
-        // ...
-        if(filestream_) {
-            std::cout << "Closing file..." << std::endl;
-            filestream_.close();
-        }
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_1] && stick_to_surface_) {
+        stick_to_surface_ = false;
     }
     // sticking distance
     if(joy->buttons[PS3_BUTTON_CROSS_UP] && abs(sticking_distance_) > 0.5f) {
@@ -232,9 +215,8 @@ void Controller::takeoffAndHover()
     }
 }
 
-void Controller::processPlaneMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
+void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
 {
-    
     // realtive plane transform
     // planeToCam = plane_tf
     plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
@@ -290,13 +272,12 @@ void Controller::testPlanes()
     // set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
     snap_goal_tf_.setRotation(plane_tf_.getRotation());
-
-    // TODO delete
-    // eval
-    filestream_ << mavToWorld_.getOrigin().x() << "," << mavToWorld_.getOrigin().y() << "," << mavToWorld_.getOrigin().z() << std::endl;
-    filestream_ << proj_pos.x() << "," << proj_pos.y() << "," << proj_pos.z() << std::endl;
 }
 
+void Controller::testCylinders()
+{
+
+}
 
 
 int main(int argc, char** argv)

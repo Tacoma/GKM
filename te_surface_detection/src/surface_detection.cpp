@@ -174,11 +174,9 @@ void SurfaceDetection::update(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 
 void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg)
 {
-    // Transform the surface into the new frame
-    update(msg);
-
     if (msg->isKeyframe) {
-//        update(msg);
+        // Transform the surface into the new frame
+        update(msg);
 
         lastMsg_ = msg;
         pcVisDebug_ = boost::make_shared<MyPointcloud>();
@@ -210,7 +208,8 @@ void SurfaceDetection::processMessage(const lsd_slam_msgs::keyframeMsgConstPtr m
                     refineCylinder(cloud);
                 }
             }
-
+            pcl::transformPointCloud(*cloud, *cloud,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+            //*pcVisDebug_ += *cloud;
             publishPointclouds();
         }
     // !isKeyframe
@@ -620,7 +619,7 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     *pcVisSurfaces_ = *pcVisSurfaces;
-    *pcVisOutliers_ = *pcCropped;p
+    *pcVisOutliers_ = *pcCropped;
 #endif
 }
 
@@ -661,10 +660,21 @@ void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
 
     // Get coefficients
     Eigen::VectorXf coefficients, coefficients_refined;
-
+    coefficients = cylinder_->getCoefficients();
 
     // Find inliers of the cylinder, and...
-    model->selectWithinDistance(coefficients, distanceThreshold_,*inliers);
+    model->selectWithinDistance(coefficients, distanceThreshold_, *inliers);
+
+    // Extract the inliers	//TODO: rm debug code
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*pcFiltered);
+
+    // transform pointcloud from optical to world
+    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    colorPointcloud(pcFiltered, debugColors[0]);
+    *pcVisDebug_ += *pcFiltered;
 
     // ...refit the cylinder with new points only, if enough points were found.
     if(inliers->size() >= minPointsForEstimation_) {
@@ -694,16 +704,6 @@ void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
         }
         return;
     }
-
-    // Extract the inliers	//TODO: rm debug code
-    extract.setInputCloud(cloud);
-    extract.setIndices(inliers);
-    extract.setNegative(false);
-    extract.filter(*pcFiltered);
-
-    // transform pointcloud from optical to world
-    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
-    *pcVisDebug_ += *pcFiltered;
 }
 
 
@@ -802,8 +802,6 @@ void SurfaceDetection::publishPlane()
     Eigen::Vector3f intersection = plane_->rayIntersection(cam_t, plane_normal);
     Eigen::Quaternionf plane_rot = plane_->getRotation();
 
-
-
     // publish
     geometry_msgs::TransformStamped tf;
     tf.header.stamp = ros::Time::now();
@@ -816,6 +814,7 @@ void SurfaceDetection::publishPlane()
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
     pubTf_.publish(tf);
+
     
     //visualization
     Plane::transformPlane(sensorToMav_ * opticalToSensor_, intersection, plane_normal);
@@ -848,24 +847,42 @@ void SurfaceDetection::publishCylinder()
 {
     if (!cylinder_) { return; }
     // calculate cylinder position
-//    Eigen::Vector3f cam_t(0,0,0);
-//    Eigen::Vector3f cylinder_point, cylinder_normal;
-//    cylinder_->calculateNormalForm(cylinder_point, cylinder_normal);
-//    Eigen::Vector3f intersection = cylinder_->rayIntersection(cam_t, cylinder_normal);
-//    Eigen::Quaternionf cylinder_rot = cylinder_->getRotation();
+    Eigen::VectorXf coefficients = cylinder_->getCoefficients(); // cylinder_->calculateNormalForm
+    Cylinder::transformCylinder(sensorToMav_ * opticalToSensor_, coefficients);
 
-    // publish
-//    geometry_msgs::TransformStamped tf;
-//    tf.header.stamp = ros::Time::now();
-//    tf.header.frame_id = mavTFName_;
-//    tf.transform.translation.x = intersection.x();
-//    tf.transform.translation.y = intersection.y();
-//    tf.transform.translation.z = intersection.z();
-//    tf.transform.rotation.x = cylinder_rot.x();
-//    tf.transform.rotation.y = cylinder_rot.y();
-//    tf.transform.rotation.z = cylinder_rot.z();
-//    tf.transform.rotation.w = cylinder_rot.w();
-//    pubTf_.publish(tf);
+    Eigen::Vector3f cylinder_point = Eigen::Vector3f(coefficients[0], coefficients[1], coefficients[2]);
+    Eigen::Vector3f cylinder_direction = Eigen::Vector3f(coefficients[3], coefficients[4], coefficients[5]);
+    Eigen::Quaternionf cylinder_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), cylinder_direction).normalized();
+
+    // recalculate cylinder pos
+    Eigen::Vector3f camPlanePoint(0.0f,0.0f,0.0f);  // cam_t
+    Eigen::Vector3f camPlaneNormal(1.0f,0.0f,0.0f);
+    Plane::transformPlane(sensorToMav_ * opticalToSensor_, camPlanePoint, camPlaneNormal);
+
+    std::vector<float> planeCoefficients;
+    planeCoefficients.push_back(camPlaneNormal[0]);
+    planeCoefficients.push_back(camPlaneNormal[1]);
+    planeCoefficients.push_back(camPlaneNormal[2]);
+    planeCoefficients.push_back(-camPlaneNormal.dot(camPlanePoint));
+    Plane proj_plane(planeCoefficients);
+    // TODO: test if ray always points in plane direction
+    Eigen::Vector3f intersection = proj_plane.rayIntersection(cylinder_point, cylinder_direction);
+
+    // publish pos, rot and radius of the cylinder
+    geometry_msgs::TransformStamped tf;
+    tf.header.stamp = ros::Time::now();
+    tf.header.frame_id = mavTFName_;
+    tf.transform.translation.x = intersection.x();
+    tf.transform.translation.y = intersection.y();
+    tf.transform.translation.z = intersection.z();
+    tf.transform.rotation.x = cylinder_rot.x();
+    tf.transform.rotation.y = cylinder_rot.y();
+    tf.transform.rotation.z = cylinder_rot.z();
+    tf.transform.rotation.w = cylinder_rot.w();
+    // TODO publish radius
+    // Maybe just multiply with rotation parameter due to normalization we can recalculate the radius probably again
+    pubTf_.publish(tf);
+
 
     // visualize
     visualization_msgs::Marker marker;
@@ -873,12 +890,9 @@ void SurfaceDetection::publishCylinder()
     marker.header.stamp = ros::Time::now();
     marker.id = 0;
     marker.type = visualization_msgs::Marker::CYLINDER;
-    Eigen::VectorXf coefficients = cylinder_->getCoefficients();
-    Cylinder::transformCylinder(sensorToMav_ * opticalToSensor_, coefficients);
-    Eigen::Quaternionf cylinder_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), Eigen::Vector3f(coefficients[3], coefficients[4], coefficients[5])).normalized();
-    marker.pose.position.x = coefficients[0];
-    marker.pose.position.y = coefficients[1];
-    marker.pose.position.z = coefficients[2];
+    marker.pose.position.x = intersection[0];
+    marker.pose.position.y = intersection[1];
+    marker.pose.position.z = intersection[2];
     marker.pose.orientation.x = cylinder_rot.x();
     marker.pose.orientation.y = cylinder_rot.y();
     marker.pose.orientation.z = cylinder_rot.z();
