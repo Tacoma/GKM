@@ -33,7 +33,7 @@ public:
         }
         point_ = Eigen::Vector4f(coefficients[0], coefficients[1], coefficients[2], 1);
         dir_ = Eigen::Vector4f(coefficients[3], coefficients[4], coefficients[5], 0);
-        radius_ = 2.0f * coefficients[6];
+        radius_ = coefficients[6];
     }
 
     Eigen::VectorXf getCoefficients() 
@@ -63,6 +63,10 @@ public:
     {
         point_ = transform * point_;
         dir_ = transform * dir_;
+
+        Sophus::Sim3f scaleTransform;
+        memcpy(scaleTransform.data(), transform.data(), 7*sizeof(float));
+        radius_ = scaleTransform.scale() * radius_;
     }
     
     static void transformCylinder(const Eigen::Matrix4f transform, Eigen::VectorXf &coefficients) {

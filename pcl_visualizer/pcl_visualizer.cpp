@@ -38,7 +38,6 @@ void update();
 
 void keyboardEventOccurred(const pcl::visualization::KeyboardEvent &event, void* viewer_void)
 {
-    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
     if(event.keyDown()) {
         if(event.getKeySym() == KEYSYM_ARROW_LEFT)
             counter_ = (counter_-1) >= 0 ? (counter_-1) : 0;
@@ -46,6 +45,10 @@ void keyboardEventOccurred(const pcl::visualization::KeyboardEvent &event, void*
             counter_++;
         else if(event.getKeySym() == "r")
             counter_ = 0;
+
+        if(counter_ >= coefficients_.size()) \
+            counter_ = coefficients_.size()-1;
+
         std::cout << "Index: " << counter_ << std::endl;
         loadPointCloud(point_cloud_ptr_, cloud_normals_, counter_);
         update();
@@ -56,9 +59,8 @@ void mouseEventOccurred(const pcl::visualization::MouseEvent &event, void* viewe
 {
     boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
     if (event.getButton () == pcl::visualization::MouseEvent::LeftButton &&
-        event.getType () == pcl::visualization::MouseEvent::MouseButtonRelease)
-    {
-
+        event.getType () == pcl::visualization::MouseEvent::MouseButtonRelease) {
+        // TODO
     }
 }
 
@@ -86,15 +88,17 @@ void loadPointCloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_ptr, pcl::Point
 void update()
 {
     viewer_->updatePointCloud(point_cloud_ptr_, "cloud");
-    viewer_->removePointCloud("normals");
-    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (point_cloud_ptr_, cloud_normals_, 10, 0.05, "normals");
+//    viewer_->removePointCloud("normals");
+//    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (point_cloud_ptr_, cloud_normals_, 10, 0.05, "normals");
+    viewer_->removeShape("cylinder");
+    viewer_->addCylinder(*coefficients_[counter_]);
 }
 
 int main(int argc, char** argv)
 {
     // Init viewer
-    viewer_->setBackgroundColor (0,0,0);
-//    viewer_->addCoordinateSystem (0.1);
+    viewer_->setBackgroundColor (45.0/255.0,45.0/255.0,45.0/255.0);
+    viewer_->addCoordinateSystem (0.1);
     viewer_->initCameraParameters ();
 
     // Register callbacks
@@ -108,10 +112,8 @@ int main(int argc, char** argv)
     loadPointCloud(point_cloud_ptr_, cloud_normals_, counter_);
     coefficientsFile_.open("/usr/stud/mueller/cylinderCoefficients.txt");
     std::string line;
-    if(coefficientsFile_.is_open())
-    {
-        while(std::getline(coefficientsFile_, line))
-        {
+    if(coefficientsFile_.is_open()) {
+        while(std::getline(coefficientsFile_, line)) {
             std::vector<std::string> strs;
             boost::split(strs, line, boost::is_any_of(" "));
 
@@ -125,19 +127,23 @@ int main(int argc, char** argv)
             coefficients_.push_back(coeff);
         }
         coefficientsFile_.close();
+    } else {
+        std::cerr << "Could not open cylinder coefficient file." << std::endl;
+        return 0;
     }
+
     // Add from file
-    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> colorH(initial_pc_ptr_);
-    viewer_->addPointCloud<pcl::PointXYZRGB> (initial_pc_ptr_, colorH, "initialCloud");
-    viewer_->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "initialCloud");
-    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (initial_pc_ptr_, initial_normals_, 10, 0.05, "initialNormals");
+//    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> colorH(initial_pc_ptr_);
+//    viewer_->addPointCloud<pcl::PointXYZRGB> (initial_pc_ptr_, colorH, "initialCloud");
+//    viewer_->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "initialCloud");
+//    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (initial_pc_ptr_, initial_normals_, 10, 0.05, "initialNormals");
     viewer_->addCylinder(*coefficients_[0]);
 
     // Add pointclouds
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(point_cloud_ptr_);
     viewer_->addPointCloud<pcl::PointXYZRGB> (point_cloud_ptr_, rgb, "cloud");
     viewer_->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cloud");
-    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (point_cloud_ptr_, cloud_normals_, 10, 0.05, "normals");
+//    viewer_->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (point_cloud_ptr_, cloud_normals_, 10, 0.05, "normals");
 
     // Main loop
     while(!viewer_->wasStopped()) {
@@ -145,5 +151,8 @@ int main(int argc, char** argv)
         boost::this_thread::sleep (boost::posix_time::microseconds (100000));
     }
 
-    coefficientsFile_.close();
+    // Clean up
+    coefficients_.clear();
+
+    return 0;
 }

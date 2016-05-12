@@ -23,6 +23,7 @@
 #include "cylinder.hpp"
 
 #define VISUALIZE // debug visualization
+#define DEBUG_FILE  // defined if we want to write pointclouds into a pcd file
 
 struct InputPointDense
 {
