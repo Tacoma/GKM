@@ -52,6 +52,8 @@
 #define PS3_AXIS_ACCELEROMETER_UP        18
 #define PS3_AXIS_GYRO_YAW                19
 
+enum SurfaceType { plane=1, cylinder=2, NUM_SURFACE_TYPES=3 };
+
 static const Eigen::Vector3f forward = Eigen::Vector3f(1,0,0);
 
 class Controller
@@ -75,9 +77,10 @@ private:
     // ros subscriber, publisher and broadcaster
     ros::Subscriber sub_joy_;
     ros::Subscriber sub_mocap_pose_;
-    ros::Subscriber sub_plane_tf_;
+    ros::Subscriber sub_surface_tf_;
     ros::Publisher pub_pose_;
     ros::Publisher pub_stickToSurface_;
+    ros::Publisher pub_surfaceType_;
     tf::TransformBroadcaster br_tf_;
 
     tf::Transform sensorToMav_;
@@ -87,12 +90,13 @@ private:
     bool goal_reached_;
     tf::Transform hover_goal_tf_;
 
-    int surfaceType_; // 1 = plane, 2 = cylinder
+    SurfaceType surfaceType_;
     bool search_for_surface_;
     bool stick_to_surface_;
     float sticking_distance_;
+    float cylinder_radius_;
     float correction_speed_;
-    tf::Transform plane_tf_;
+    tf::Transform surface_tf_;
     tf::Transform snap_goal_tf_;
 
     // stick deadzone

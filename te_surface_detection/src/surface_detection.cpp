@@ -64,6 +64,7 @@ SurfaceDetection::SurfaceDetection() :
     subKeyframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/keyframes"), 10, &SurfaceDetection::processMessage, this);
     subLiveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);
     subStickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
+    subSurfaceType_ = nh_.subscribe<std_msgs::Int32>("controller/surfaceType", 10, &SurfaceDetection::setSurfaceType, this);
     pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pubMarkers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
     pubTf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
@@ -152,6 +153,18 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
         coefficientsFile_.close();
     }
 #endif
+}
+
+void SurfaceDetection::setSurfaceType(const std_msgs::Int32::ConstPtr& msg)
+{
+    if (surfaceType_ == msg->data) {
+        return;
+    }
+    reset();
+    surfaceType_ = msg->data;
+    if (lastMsg_) {
+        processMessage(lastMsg_);
+    }
 }
 
 void SurfaceDetection::update(const lsd_slam_msgs::keyframeMsgConstPtr msg)

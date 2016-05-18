@@ -1,5 +1,6 @@
 #include "controller_node.h"
 #include <std_msgs/Bool.h>
+#include <std_msgs/Int32.h>
 #include <std_srvs/Empty.h>
 #include <iostream>
 
@@ -10,7 +11,7 @@ static std::ofstream filestream_;
 
 Controller::Controller() :
     goal_reached_(true),
-    surfaceType_(1),
+    surfaceType_(plane),
     search_for_surface_(false),
     stick_to_surface_(false),
     sticking_distance_(0.5f),
@@ -34,10 +35,11 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processSurfaceMsg, this);
-    sub_plane_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("cylinder", 10, &Controller::processSurfaceMsg, this);
+    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processSurfaceMsg, this);
+    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("cylinder", 10, &Controller::processSurfaceMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("controller/stickToSurface", 10);
+    pub_surfaceType_ = nh_.advertise<std_msgs::Int32>("controller/surfaceType", 10);
 
     std::cout << "speeds: " << speedX_ << " " << speedY_ << " " << speedZ_ << " " << speedYaw_ << std::endl;
 
@@ -59,10 +61,11 @@ Controller::Controller() :
     hover_goal_tf_.setRotation(q);
 
     // init plane_tf
-    plane_tf_.setOrigin(tf::Vector3(2,0,0));
-    tf::Quaternion plane_q;
-    plane_q.setRPY(0,0,-M_PI/4.f);
-    plane_tf_.setRotation(plane_q);
+    surface_tf_.setOrigin(tf::Vector3(2,0,0));
+    tf::Quaternion surface_q;
+    surface_q.setRPY(0,0,-M_PI/4.f);
+    surface_tf_.setRotation(surface_q);
+    cylinder_radius_ = 0.5f;
 
     // init snap_goal_tf
     snap_goal_tf_.setOrigin(tf::Vector3(0,0,0));
@@ -83,7 +86,7 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     mavToWorld_.setOrigin( tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z) );
     mavToWorld_.setRotation( tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w) );
 
-    /// takeoff and hover blocks until goal is reached
+    /// takeoff and hover blocks all other inputs until goal position is reached
     if(!goal_reached_) {
         tf::Transform diff = mavToWorld_.inverse() * hover_goal_tf_;
         if(diff.getOrigin().length() < 0.1f) {
@@ -102,10 +105,19 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     tf::Transform curr_transform;
     /// stick to plane
     if(stick_to_surface_ && goal_reached_) {
-        testPlanes();
+        switch(surfaceType_) {
+        case plane:
+            testPlanes();
+            break;
+        case cylinder:
+            testCylinders();
+            break;
+        default:
+            break;
+        }
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
         curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
-	//curr_transform.setOrigin(snap_goal_tf_.getOrigin());
+        //curr_transform.setOrigin(snap_goal_tf_.getOrigin());
         curr_transform.setRotation(snap_goal_tf_.getRotation());
     } else {
         curr_transform = mavToWorld_ * transform_;
@@ -141,6 +153,13 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         goal_reached_ = false;
         takeoffAndHover();
     }
+    // change surface type
+    if(joy->buttons[PS3_BUTTON_SELECT]) {
+        surfaceType_ = SurfaceType((surfaceType_ + 1 % NUM_SURFACE_TYPES) + 1);
+        std_msgs::Int32 type;
+        type.data = (int)surfaceType_;
+        pub_surfaceType_.publish(type);
+    }
     // tell SurfaceDetection to search for a plane
     if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
         search_for_surface_ = true;
@@ -160,8 +179,8 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
         is_active_ = true;
 
         // set current distance to surface as sticking distance
-        Eigen::Vector3f plane_pos = Eigen::Vector3f( plane_tf_.getOrigin().x(), plane_tf_.getOrigin().y(), plane_tf_.getOrigin().z() );
-        tf::Quaternion plane_q = plane_tf_.getRotation();
+        Eigen::Vector3f plane_pos = Eigen::Vector3f( surface_tf_.getOrigin().x(), surface_tf_.getOrigin().y(), surface_tf_.getOrigin().z() );
+        tf::Quaternion plane_q = surface_tf_.getRotation();
         Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.w(),plane_q.x(),plane_q.y(),plane_q.z());
         Eigen::Vector3f normal = plane_rot*forward;
         normal.normalize();
@@ -174,19 +193,19 @@ void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
     // sticking distance
     if(joy->buttons[PS3_BUTTON_CROSS_UP] && abs(sticking_distance_) > 0.5f) {
         sticking_distance_ -= 0.005f;
-	is_active_ = true;
+        is_active_ = true;
     }
     if(joy->buttons[PS3_BUTTON_CROSS_DOWN]) {
         sticking_distance_ += 0.005f;
-	is_active_ = true;
+        is_active_ = true;
     }
 
     /// axes
-    if(std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) > STICK_DEADZONE ||
-	std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) > STICK_DEADZONE ||
-	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) > STICK_DEADZONE ||
-	std::abs(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]) > STICK_DEADZONE) {
-	is_active_ = true;
+    if( std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]) > STICK_DEADZONE ||
+        std::abs(joy->axes[PS3_AXIS_STICK_RIGHT_LEFTWARDS]) > STICK_DEADZONE ||
+        std::abs(joy->axes[PS3_AXIS_STICK_LEFT_UPWARDS]) > STICK_DEADZONE ||
+        std::abs(joy->axes[PS3_AXIS_STICK_LEFT_LEFTWARDS]) > STICK_DEADZONE) {
+        is_active_ = true;
     }
     /// translation from controller axis
     float jx = speedX_ * stick_deadzone_(joy->axes[PS3_AXIS_STICK_RIGHT_UPWARDS]);
@@ -217,30 +236,42 @@ void Controller::takeoffAndHover()
 
 void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
 {
-    // realtive plane transform
-    // planeToCam = plane_tf
-    plane_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
-    plane_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+    if(surfaceType_ == plane) {
+        // realtive plane transform
+        // planeToCam = surface_tf
+        surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
+        surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+    }  else if(surfaceType_ == cylinder){
+        // TODO
+        // realtive cylinder transform
+        // cylinderToCam = surface_tf
+        surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
+        surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+    } else {
+        std::cerr << "Unknown surface type selected." << std::endl;
+        return;
+    }
 
-    // plane forward is z should be x, conversion of systems
+    /// transform into global coordinate system and send debug transform
+    // plane forward is z should be x, conversion of coordinate systems
     // camToSensor
     tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
     tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
     tf::Quaternion opticalToSensor = q2*q1;
-    plane_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*plane_tf_.getOrigin() );
-    plane_tf_.setRotation( opticalToSensor*plane_tf_.getRotation() );
-    //br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
+    surface_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*surface_tf_.getOrigin() );
+    surface_tf_.setRotation( opticalToSensor*surface_tf_.getRotation() );
+    //br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
 
     // correct the relative camera offset
-    // planeToMav = plane_tf
-    plane_tf_ = sensorToMav_*plane_tf_;
+    // planeToMav = surface_tf
+    surface_tf_ = sensorToMav_*surface_tf_;
 
     // transform into global coordinates
-    // planeToWorld = plane_tf_
-    plane_tf_ = mavToWorld_*plane_tf_;
+    // planeToWorld = surface_tf_
+    surface_tf_ = mavToWorld_*surface_tf_;
 
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(plane_tf_, ros::Time::now(), "world", "controller/plane") );
+    br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "world", "controller/plane") );
 }
 
 void Controller::testPlanes()
@@ -255,12 +286,12 @@ void Controller::testPlanes()
                                                mav_tf.getOrigin().z());
 
     //// plane
-    Eigen::Vector3f plane_pos = Eigen::Vector3f( plane_tf_.getOrigin().x(), plane_tf_.getOrigin().y(), plane_tf_.getOrigin().z() );
-    tf::Quaternion plane_q = plane_tf_.getRotation();
+    Eigen::Vector3f plane_pos = Eigen::Vector3f( surface_tf_.getOrigin().x(), surface_tf_.getOrigin().y(), surface_tf_.getOrigin().z() );
+    tf::Quaternion plane_q = surface_tf_.getRotation();
     Eigen::Quaternionf plane_rot = Eigen::Quaternionf(plane_q.w(),plane_q.x(),plane_q.y(),plane_q.z());
 
     //// calculations
-    Eigen::Vector3f normal = plane_rot*forward;
+    Eigen::Vector3f normal = plane_rot * forward;
     normal.normalize();
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
@@ -269,14 +300,41 @@ void Controller::testPlanes()
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
 
-    // set snapping goal tf
+    /// set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    snap_goal_tf_.setRotation(plane_tf_.getRotation());
+    // TODO: fix rotation to only change the yaw of the rotation
+    snap_goal_tf_.setRotation(surface_tf_.getRotation());
 }
 
 void Controller::testCylinders()
 {
+    //// mav
+    // predicted mav tf
+    tf::Transform mav_tf = mavToWorld_ * transform_;
 
+    // Eigen conversions, predicted mav pos
+    Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
+                                               mav_tf.getOrigin().y(),
+                                               mav_tf.getOrigin().z());
+
+    //// cylinder
+    Eigen::Vector3f cylinder_pos = Eigen::Vector3f( surface_tf_.getOrigin().x(), surface_tf_.getOrigin().y(), surface_tf_.getOrigin().z() );
+    tf::Quaternion cylinder_q = surface_tf_.getRotation();
+    Eigen::Quaternionf cylinder_rot = Eigen::Quaternionf(cylinder_q.w(),cylinder_q.x(),cylinder_q.y(),cylinder_q.z());
+
+    //// calculations
+    Eigen::Vector3f normal = cylinder_rot * forward;
+    normal.normalize();
+    // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
+    Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
+    int facing = normal.dot(curr_pos-cylinder_pos) >= 0 ? 1 : -1;
+    // calculate projected position of the mav onto the cylinder
+    Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ + cylinder_radius_ - normal.dot(mav_pos-cylinder_pos))*normal;
+
+    /// set snapping goal tf
+    snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
+    // TODO: fix rotation to only change the yaw of the rotation
+    snap_goal_tf_.setRotation(surface_tf_.getRotation());
 }
 
 
