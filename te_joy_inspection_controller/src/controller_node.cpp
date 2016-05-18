@@ -35,7 +35,7 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("plane", 10, &Controller::processSurfaceMsg, this);
+    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("surface", 10, &Controller::processSurfaceMsg, this);
     sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("cylinder", 10, &Controller::processSurfaceMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("controller/stickToSurface", 10);
@@ -148,26 +148,36 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
 void Controller::callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
     /// buttons
-    // listen for take off button pressed
+    // poll button states and check for changed buttons
+    for(int i=0; i<17; i++) { // PS3 controller has 17 seperate buttons
+        if(joy->buttons[i] != buttonDown_[i])
+            buttonChanged_[i] = true;
+        else
+            buttonChanged_[i] = false;
+
+        buttonDown_[i] = joy->buttons[i];
+    }
+
+    // take off
     if(joy->buttons[PS3_BUTTON_PAIRING] || joy->buttons[PS3_BUTTON_START]) {
         goal_reached_ = false;
         takeoffAndHover();
     }
     // change surface type
-    if(joy->buttons[PS3_BUTTON_SELECT]) {
-        surfaceType_ = SurfaceType((surfaceType_ + 1 % NUM_SURFACE_TYPES) + 1);
+    if(joy->buttons[PS3_BUTTON_SELECT] && buttonChanged_[PS3_BUTTON_SELECT]) {
+        surfaceType_ = surfaceType_ == plane ? cylinder : plane;
         std_msgs::Int32 type;
-        type.data = (int)surfaceType_;
+        type.data = surfaceType_;
         pub_surfaceType_.publish(type);
     }
-    // tell SurfaceDetection to search for a plane
-    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2]) {
+    // set search for surface
+    if(joy->buttons[PS3_BUTTON_REAR_RIGHT_2] && buttonChanged_[PS3_BUTTON_REAR_RIGHT_2]) {
         search_for_surface_ = true;
         std_msgs::Bool sticking;
         sticking.data = search_for_surface_;
         pub_stickToSurface_.publish(sticking);
     }
-    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2]) {
+    if(joy->buttons[PS3_BUTTON_REAR_LEFT_2] && buttonChanged_[PS3_BUTTON_REAR_LEFT_2]) {
         search_for_surface_ = false;
         std_msgs::Bool sticking;
         sticking.data = search_for_surface_;
@@ -236,6 +246,7 @@ void Controller::takeoffAndHover()
 
 void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
 {
+    std::cout << "processSurfaceMsg" << std::endl;
     if(surfaceType_ == plane) {
         // realtive plane transform
         // planeToCam = surface_tf
@@ -248,7 +259,7 @@ void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstP
         surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
         surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
     } else {
-        std::cerr << "Unknown surface type selected." << std::endl;
+        std::cout << "Unknown surface type selected." << std::endl;
         return;
     }
 
@@ -271,7 +282,8 @@ void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstP
     surface_tf_ = mavToWorld_*surface_tf_;
 
     // rviz debug
-    br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "world", "controller/plane") );
+    std::cout << "broadcast surface" << std::endl;
+    br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "world", "controller/surface") );
 }
 
 void Controller::testPlanes()

@@ -52,8 +52,10 @@
 #define PS3_AXIS_ACCELEROMETER_UP        18
 #define PS3_AXIS_GYRO_YAW                19
 
-enum SurfaceType { plane=1, cylinder=2, NUM_SURFACE_TYPES=3 };
+static bool buttonDown_[17] = {false};
+static bool buttonChanged_[17] = {false};
 
+enum SurfaceType { plane=1, cylinder=2, NUM_SURFACE_TYPES=3 };
 static const Eigen::Vector3f forward = Eigen::Vector3f(1,0,0);
 
 class Controller

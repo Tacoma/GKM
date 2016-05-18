@@ -67,7 +67,7 @@ SurfaceDetection::SurfaceDetection() :
     subSurfaceType_ = nh_.subscribe<std_msgs::Int32>("controller/surfaceType", 10, &SurfaceDetection::setSurfaceType, this);
     pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pubMarkers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pubTf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("plane", 10);
+    pubTf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("surface", 10);
     pubCylinder_ = private_nh_.advertise<visualization_msgs::Marker>("cylinder", 10);
 
     //ros param
