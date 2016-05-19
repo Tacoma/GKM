@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf_conversions
   visualization_msgs
   lsd_slam_msgs
+  surface_detection_msgs
   dynamic_reconfigure
 )
 

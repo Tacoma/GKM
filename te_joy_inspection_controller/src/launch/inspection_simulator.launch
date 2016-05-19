@@ -3,7 +3,7 @@
 
   <arg name="mav_name" value="euroc_hex" />
   <!-- <arg name="loc" default="slam" /> --> <!-- okvis, rovio, slam, vicon -->
-  <arg name="world_name" default="tum_kitchen" />
+  <arg name="world_name" default="tum_lab" />
 
   <!-- load world model -->
   <include file="$(find te_simulator_resources)/launch/world.launch">

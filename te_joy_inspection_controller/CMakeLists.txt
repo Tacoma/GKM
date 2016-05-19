@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   tf
   eigen_conversions
+  surface_detection_msgs
 )
 
 catkin_package(

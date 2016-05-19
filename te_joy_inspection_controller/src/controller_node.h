@@ -9,6 +9,8 @@
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <surface_detection_msgs/Surface.h>
+
 
 // buttons are either 0 or 1
 #define PS3_BUTTON_SELECT            0
@@ -69,7 +71,7 @@ public:
     void takeoffAndHover();
 
 private:
-    void processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg);
+    void processSurfaceMsg(const surface_detection_msgs::Surface::ConstPtr& msg);
     void testPlanes();
     void testCylinders();
 

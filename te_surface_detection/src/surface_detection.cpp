@@ -15,6 +15,7 @@
 #include <tf/transform_broadcaster.h>
 
 #include <geometry_msgs/PolygonStamped.h>
+#include <surface_detection_msgs/Surface.h>
 #include <visualization_msgs/MarkerArray.h>
 //#include <jsk_recognition_msgs/PolygonArray.h>
 
@@ -55,7 +56,7 @@ SurfaceDetection::SurfaceDetection() :
     minPointsForEstimation_(20),
     noisePercentage_(0),
     maxPlanesPerCloud_(1),
-    surfaceType_(2)
+    surfaceType_(1)
 {
     nh_ = ros::NodeHandle("");
     private_nh_ = ros::NodeHandle("~");
@@ -67,7 +68,7 @@ SurfaceDetection::SurfaceDetection() :
     subSurfaceType_ = nh_.subscribe<std_msgs::Int32>("controller/surfaceType", 10, &SurfaceDetection::setSurfaceType, this);
     pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     //pubMarkers_ = private_nh_.advertise< jsk_recognition_msgs::PolygonArray>("Hull", 10);
-    pubTf_ = private_nh_.advertise<geometry_msgs::TransformStamped>("surface", 10);
+    pubTf_ = private_nh_.advertise<surface_detection_msgs::Surface>("surface", 10);
     pubCylinder_ = private_nh_.advertise<visualization_msgs::Marker>("cylinder", 10);
 
     //ros param
@@ -816,7 +817,7 @@ void SurfaceDetection::publishPlane()
     Eigen::Quaternionf plane_rot = plane_->getRotation();
 
     // publish
-    geometry_msgs::TransformStamped tf;
+    surface_detection_msgs::Surface tf;
     tf.header.stamp = ros::Time::now();
     tf.header.frame_id = mavTFName_;
     tf.transform.translation.x = intersection.x();
@@ -826,6 +827,7 @@ void SurfaceDetection::publishPlane()
     tf.transform.rotation.y = plane_rot.y();
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
+    tf.radius = 0.1f; // not used
     pubTf_.publish(tf);
 
     
@@ -865,6 +867,7 @@ void SurfaceDetection::publishCylinder()
 
     Eigen::Vector3f cylinder_point = Eigen::Vector3f(coefficients[0], coefficients[1], coefficients[2]);
     Eigen::Vector3f cylinder_direction = Eigen::Vector3f(coefficients[3], coefficients[4], coefficients[5]);
+    float cylinder_radius = coefficients[6];
     Eigen::Quaternionf cylinder_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(0,0,1), cylinder_direction).normalized();
 
     // recalculate cylinder pos
@@ -882,7 +885,7 @@ void SurfaceDetection::publishCylinder()
     Eigen::Vector3f intersection = proj_plane.rayIntersection(cylinder_point, cylinder_direction);
 
     // publish pos, rot and radius of the cylinder
-    geometry_msgs::TransformStamped tf;
+    surface_detection_msgs::Surface tf;
     tf.header.stamp = ros::Time::now();
     tf.header.frame_id = mavTFName_;
     tf.transform.translation.x = intersection.x();
@@ -892,7 +895,7 @@ void SurfaceDetection::publishCylinder()
     tf.transform.rotation.y = cylinder_rot.y();
     tf.transform.rotation.z = cylinder_rot.z();
     tf.transform.rotation.w = cylinder_rot.w();
-    // TODO publish radius
+    tf.radius = cylinder_radius;
     // Maybe just multiply with rotation parameter due to normalization we can recalculate the radius probably again
     pubTf_.publish(tf);
 

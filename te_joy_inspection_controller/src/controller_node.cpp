@@ -35,8 +35,7 @@ Controller::Controller() :
     // set subscriber and publisher
     sub_joy_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::callback, this);
     sub_mocap_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("estimated_transform", 10, &Controller::setMocapPose, this);
-    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("surface", 10, &Controller::processSurfaceMsg, this);
-    sub_surface_tf_ = nh_.subscribe<geometry_msgs::TransformStamped>("cylinder", 10, &Controller::processSurfaceMsg, this);
+    sub_surface_tf_ = nh_.subscribe<surface_detection_msgs::Surface>("te_surface_detection/surface", 10, &Controller::processSurfaceMsg, this);
     pub_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("command/pose", 1);
     pub_stickToSurface_ = nh_.advertise<std_msgs::Bool>("controller/stickToSurface", 10);
     pub_surfaceType_ = nh_.advertise<std_msgs::Int32>("controller/surfaceType", 10);
@@ -244,7 +243,7 @@ void Controller::takeoffAndHover()
     }
 }
 
-void Controller::processSurfaceMsg(const geometry_msgs::TransformStamped::ConstPtr& msg)
+void Controller::processSurfaceMsg(const surface_detection_msgs::Surface::ConstPtr& msg)
 {
     std::cout << "processSurfaceMsg" << std::endl;
     if(surfaceType_ == plane) {
