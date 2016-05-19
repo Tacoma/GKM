@@ -24,11 +24,6 @@
 #include <eigen3/Eigen/src/Core/Matrix.h>
 #include "surface_detection.h"
 
-#ifdef DEBUG_FILE
-static int counter_ = 0;
-static std::ofstream coefficientsFile_;
-#endif
-
 const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                         Eigen::Vector3f(  0,255,  0),
                                         Eigen::Vector3f(  0,  0,255),
@@ -111,9 +106,6 @@ SurfaceDetection::SurfaceDetection() :
 SurfaceDetection::~SurfaceDetection()
 {
     reset();
-#ifdef DEBUG_FILE
-    coefficientsFile_.close();
-#endif
 }
 
 
@@ -129,10 +121,6 @@ void SurfaceDetection::reset()
     searchSurface_ = false;
     surfaceExists_ = false;
     status = -1;
-
-#ifdef DEBUG_FILE
-    counter_ = 0;
-#endif
 }
 
 
@@ -146,14 +134,6 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
     if (lastMsg_) {
         processMessage(lastMsg_);
     }
-
-#ifdef DEBUG_FILE
-    if(searchSurface_) {
-        coefficientsFile_.open("/usr/stud/mueller/cylinderCoefficients.txt");
-    } else {
-        coefficientsFile_.close();
-    }
-#endif
 }
 
 void SurfaceDetection::setSurfaceType(const std_msgs::Int32::ConstPtr& msg)
@@ -447,7 +427,6 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
 }
 
 
-
 void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
 {
     // Init
@@ -618,16 +597,6 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
     }
     std::cout << std::endl;
 
-#ifdef DEBUG_FILE
-    std::stringstream filename;
-    filename << "/usr/stud/mueller/test_pcd" << counter_++ << ".pcd";
-    pcl::io::savePCDFileASCII (filename.str().c_str(), *pcVisSurfaces);
-
-    Eigen::VectorXf c = cylinder_->getCoefficients();
-    coefficientsFile_ << c[0] << " " << c[1] << " " << c[2] << " "  // Position
-                      << c[3] << " " << c[4] << " " << c[5] << " "  // Direction
-                      << c[6] << " " << '\n';                       // Radius
-#endif
 #ifdef VISUALIZE
     // Add pointcloud keyframe to the accumulated pointclouds depending on planar property
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
@@ -642,17 +611,6 @@ void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
 {
     // Init
     MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
-
-#ifdef DEBUG_FILE
-    std::stringstream filename;
-    filename << "/usr/stud/mueller/test_pcd" << counter_++ << ".pcd";
-    pcl::io::savePCDFileASCII (filename.str().c_str(), *cloud);
-
-    Eigen::VectorXf c = cylinder_->getCoefficients();
-    coefficientsFile_ << c[0] << " " << c[1] << " " << c[2] << " "  // Position
-                      << c[3] << " " << c[4] << " " << c[5] << " "  // Direction
-                      << c[6] << " " << '\n';                       // Radius
-#endif
 
     // Create the cylinder model and set all the parameters
     pcl::SampleConsensusModelCylinder<MyPoint, MyNormal>::Ptr model = boost::make_shared<pcl::SampleConsensusModelCylinder<MyPoint, MyNormal> >(cloud);
@@ -687,7 +645,6 @@ void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
 
     // transform pointcloud from optical to world
     pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
-    colorPointcloud(pcFiltered, debugColors[0]);
     *pcVisDebug_ += *pcFiltered;
 
     // ...refit the cylinder with new points only, if enough points were found.
@@ -809,7 +766,7 @@ void SurfaceDetection::publishPolygons()
 void SurfaceDetection::publishPlane()
 {
     if (!plane_) { return; }
-    // calculate Plane position
+    // calculate plane position
     Eigen::Vector3f cam_t(0,0,0);
     Eigen::Vector3f plane_point, plane_normal;
     plane_->calculateNormalForm(plane_point, plane_normal);
@@ -827,7 +784,7 @@ void SurfaceDetection::publishPlane()
     tf.transform.rotation.y = plane_rot.y();
     tf.transform.rotation.z = plane_rot.z();
     tf.transform.rotation.w = plane_rot.w();
-    tf.radius = 0.1f; // not used
+    tf.radius = 0.1f; // not used for planes
     pubTf_.publish(tf);
 
     
@@ -884,7 +841,7 @@ void SurfaceDetection::publishCylinder()
     // TODO: test if ray always points in plane direction
     Eigen::Vector3f intersection = proj_plane.rayIntersection(cylinder_point, cylinder_direction);
 
-    // publish pos, rot and radius of the cylinder
+    // publish
     surface_detection_msgs::Surface tf;
     tf.header.stamp = ros::Time::now();
     tf.header.frame_id = mavTFName_;
@@ -896,7 +853,6 @@ void SurfaceDetection::publishCylinder()
     tf.transform.rotation.z = cylinder_rot.z();
     tf.transform.rotation.w = cylinder_rot.w();
     tf.radius = cylinder_radius;
-    // Maybe just multiply with rotation parameter due to normalization we can recalculate the radius probably again
     pubTf_.publish(tf);
 
 
@@ -914,22 +870,15 @@ void SurfaceDetection::publishCylinder()
     marker.pose.orientation.z = cylinder_rot.z();
     marker.pose.orientation.w = cylinder_rot.w();
     // scale times 2 because RVIZ marker expects the diameter instead of the radius
-    marker.scale.x = 2.0f * coefficients[6];
-    marker.scale.y = 2.0f * coefficients[6];
-    marker.scale.z = 2.0f * coefficients[6];
+    marker.scale.x = 2.0f * cylinder_radius;
+    marker.scale.y = 2.0f * cylinder_radius;
+    marker.scale.z = 2.0f * cylinder_radius;
     marker.color.r = 0.0f;
     marker.color.g = 1.0f;
     marker.color.b = 0.0f;
     marker.color.a = 0.8;
     marker.lifetime = ros::Duration();
     pubCylinder_.publish(marker);
-
-    // RVIZ debug
-    tf::TransformBroadcaster tf_br;
-    tf::Transform transform;
-    transform.setOrigin(tf::Vector3(coefficients[0], coefficients[1], coefficients[2]));
-    transform.setRotation(tf::Quaternion(marker.pose.orientation.x, marker.pose.orientation.y, marker.pose.orientation.z, marker.pose.orientation.w));
-    tf_br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), mavTFName_, "cylinder"));
 }
 
 

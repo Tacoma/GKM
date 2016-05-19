@@ -105,14 +105,15 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
     /// stick to plane
     if(stick_to_surface_ && goal_reached_) {
         switch(surfaceType_) {
-        case plane:
-            testPlanes();
-            break;
-        case cylinder:
-            testCylinders();
-            break;
-        default:
-            break;
+            case plane:
+                testPlanes();
+                break;
+            case cylinder:
+                testCylinders();
+                break;
+            default:
+            std::cout << "No snapping goal set..." << std::endl;
+                break;
         }
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
         curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
@@ -245,43 +246,41 @@ void Controller::takeoffAndHover()
 
 void Controller::processSurfaceMsg(const surface_detection_msgs::Surface::ConstPtr& msg)
 {
-    std::cout << "processSurfaceMsg" << std::endl;
     if(surfaceType_ == plane) {
         // realtive plane transform
         // planeToCam = surface_tf
         surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
         surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+
+        // plane forward is z should be x, conversion of coordinate systems
+        // camToSensor
+        tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
+        tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
+        tf::Quaternion opticalToSensor = q2*q1;
+        surface_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*surface_tf_.getOrigin() );
+        surface_tf_.setRotation( opticalToSensor*surface_tf_.getRotation() );
+        //br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
+
+        // correct the relative camera offset
+        // planeToMav = surface_tf
+        surface_tf_ = sensorToMav_*surface_tf_;
     }  else if(surfaceType_ == cylinder){
-        // TODO
         // realtive cylinder transform
         // cylinderToCam = surface_tf
         surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
         surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
+        cylinder_radius_ = msg->radius;
     } else {
         std::cout << "Unknown surface type selected." << std::endl;
         return;
     }
 
     /// transform into global coordinate system and send debug transform
-    // plane forward is z should be x, conversion of coordinate systems
-    // camToSensor
-    tf::Quaternion q1; q1.setRPY(0,M_PI/2.0,0);
-    tf::Quaternion q2; q2.setRPY(-M_PI/2.0,0,0);
-    tf::Quaternion opticalToSensor = q2*q1;
-    surface_tf_.setOrigin( tf::Matrix3x3(opticalToSensor)*surface_tf_.getOrigin() );
-    surface_tf_.setRotation( opticalToSensor*surface_tf_.getRotation() );
-    //br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "euroc_hex/vi_sensor/ground_truth", "plane_Sensor") );
-
-    // correct the relative camera offset
-    // planeToMav = surface_tf
-    surface_tf_ = sensorToMav_*surface_tf_;
-
     // transform into global coordinates
     // planeToWorld = surface_tf_
     surface_tf_ = mavToWorld_*surface_tf_;
 
     // rviz debug
-    std::cout << "broadcast surface" << std::endl;
     br_tf_.sendTransform( tf::StampedTransform(surface_tf_, ros::Time::now(), "world", "controller/surface") );
 }
 
@@ -315,6 +314,9 @@ void Controller::testPlanes()
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
     // TODO: fix rotation to only change the yaw of the rotation
     snap_goal_tf_.setRotation(surface_tf_.getRotation());
+
+    // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(snap_goal_tf_, ros::Time::now(), "world", "controller/proj_pos") );
 }
 
 void Controller::testCylinders()
@@ -336,16 +338,21 @@ void Controller::testCylinders()
     //// calculations
     Eigen::Vector3f normal = cylinder_rot * forward;
     normal.normalize();
+
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
     int facing = normal.dot(curr_pos-cylinder_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the cylinder
-    Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ + cylinder_radius_ - normal.dot(mav_pos-cylinder_pos))*normal;
+    // TODO: change radius depending on the angle, right now treat cylinder at this point as sphere
+    Eigen::Vector3f proj_pos = mav_pos + (facing*(sticking_distance_ + cylinder_radius_) - normal.dot(mav_pos-cylinder_pos))*normal;
 
     /// set snapping goal tf
     snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
     // TODO: fix rotation to only change the yaw of the rotation
     snap_goal_tf_.setRotation(surface_tf_.getRotation());
+
+    // rviz debug
+    br_tf_.sendTransform( tf::StampedTransform(snap_goal_tf_, ros::Time::now(), "world", "controller/proj_pos") );
 }
 
 
