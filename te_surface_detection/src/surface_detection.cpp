@@ -838,8 +838,22 @@ void SurfaceDetection::publishCylinder()
     planeCoefficients.push_back(camPlaneNormal[2]);
     planeCoefficients.push_back(-camPlaneNormal.dot(camPlanePoint));
     Plane proj_plane(planeCoefficients);
-    // TODO: test if ray always points in plane direction
     Eigen::Vector3f intersection = proj_plane.rayIntersection(cylinder_point, cylinder_direction);
+
+    Eigen::Vector3f camPlaneNormal2(0,0,1);
+    std::vector<float> planeCoefficients2;
+    planeCoefficients2.push_back(camPlaneNormal2[0]);
+    planeCoefficients2.push_back(camPlaneNormal2[1]);
+    planeCoefficients2.push_back(camPlaneNormal2[2]);
+    planeCoefficients2.push_back(-camPlaneNormal2.dot(camPlanePoint));
+    Plane proj_plane2(planeCoefficients2);
+    Eigen::Vector3f intersection2 = proj_plane2.rayIntersection(cylinder_point, cylinder_direction);
+
+//    intersection = intersection2;
+    if((intersection-camPlanePoint).squaredNorm() > (intersection2-camPlanePoint).squaredNorm()) {
+        intersection = intersection2;
+    }
+
 
     // publish
     surface_detection_msgs::Surface tf;
@@ -862,9 +876,9 @@ void SurfaceDetection::publishCylinder()
     marker.header.stamp = ros::Time::now();
     marker.id = 0;
     marker.type = visualization_msgs::Marker::CYLINDER;
-    marker.pose.position.x = intersection[0];
-    marker.pose.position.y = intersection[1];
-    marker.pose.position.z = intersection[2];
+    marker.pose.position.x = intersection.x();
+    marker.pose.position.y = intersection.y();
+    marker.pose.position.z = intersection.z();
     marker.pose.orientation.x = cylinder_rot.x();
     marker.pose.orientation.y = cylinder_rot.y();
     marker.pose.orientation.z = cylinder_rot.z();
@@ -904,8 +918,6 @@ void SurfaceDetection::configCallback(te_surface_detection::generalConfig &confi
         processMessage(lastMsg_);
     }
 }
-
-
 
 
 
