@@ -3,11 +3,11 @@
 #include <std_msgs/Int32.h>
 #include <std_srvs/Empty.h>
 #include <iostream>
+#include <math.h>
 
 #define STICK_DEADZONE 0.1f
 
-#include <fstream>
-static std::ofstream filestream_;
+// TODO: rename transform_ to axisInputTransform or similar
 
 Controller::Controller() :
     goal_reached_(true),
@@ -112,12 +112,11 @@ void Controller::setMocapPose(const geometry_msgs::PoseWithCovarianceStamped::Co
                 testCylinders();
                 break;
             default:
-            std::cout << "No snapping goal set..." << std::endl;
+                std::cout << "No snapping goal set..." << std::endl;
                 break;
         }
         tf::Vector3 diff = snap_goal_tf_.getOrigin() - mavToWorld_.getOrigin();
-        curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff);
-        //curr_transform.setOrigin(snap_goal_tf_.getOrigin());
+        curr_transform.setOrigin(mavToWorld_.getOrigin() + correction_speed_*diff); //curr_transform.setOrigin(snap_goal_tf_.getOrigin());
         curr_transform.setRotation(snap_goal_tf_.getRotation());
     } else {
         curr_transform = mavToWorld_ * transform_;
@@ -265,7 +264,7 @@ void Controller::processSurfaceMsg(const surface_detection_msgs::Surface::ConstP
         // planeToMav = surface_tf
         surface_tf_ = sensorToMav_*surface_tf_;
     }  else if(surfaceType_ == cylinder){
-        // realtive cylinder transform
+        // absolut cylinder transform
         // cylinderToCam = surface_tf
         surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
         surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );
@@ -305,7 +304,6 @@ void Controller::testPlanes()
     normal.normalize();
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
-
     int facing = normal.dot(curr_pos-plane_pos) >= 0 ? 1 : -1;
     // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*sticking_distance_ - normal.dot(mav_pos-plane_pos))*normal;
@@ -319,16 +317,13 @@ void Controller::testPlanes()
     br_tf_.sendTransform( tf::StampedTransform(snap_goal_tf_, ros::Time::now(), "world", "controller/proj_pos") );
 }
 
+// horizontal cylinder
 void Controller::testCylinders()
 {
     //// mav
     // predicted mav tf
     tf::Transform mav_tf = mavToWorld_ * transform_;
-
-    // Eigen conversions, predicted mav pos
-    Eigen::Vector3f mav_pos = Eigen::Vector3f( mav_tf.getOrigin().x(),
-                                               mav_tf.getOrigin().y(),
-                                               mav_tf.getOrigin().z());
+    Eigen::Vector3f mav_pos = Eigen::Vector3f(mav_tf.getOrigin().x(), mav_tf.getOrigin().y(), mav_tf.getOrigin().z());
 
     //// cylinder
     Eigen::Vector3f cylinder_pos = Eigen::Vector3f( surface_tf_.getOrigin().x(), surface_tf_.getOrigin().y(), surface_tf_.getOrigin().z() );
@@ -342,13 +337,16 @@ void Controller::testCylinders()
     // determine if mav is in front or behind plane normal, take current pos to avoid switching of sides by wrong predictions in mav_tf
     Eigen::Vector3f curr_pos = Eigen::Vector3f(mavToWorld_.getOrigin().x(), mavToWorld_.getOrigin().y(), mavToWorld_.getOrigin().z());
     int facing = normal.dot(curr_pos-cylinder_pos) >= 0 ? 1 : -1;
-    // calculate projected position of the mav onto the cylinder
-    // TODO: change radius depending on the angle, right now treat cylinder at this point as sphere
+
+    // calculate projected position of the mav onto the plane
     Eigen::Vector3f proj_pos = mav_pos + (facing*(sticking_distance_ + cylinder_radius_) - normal.dot(mav_pos-cylinder_pos))*normal;
 
     /// set snapping goal tf
-    snap_goal_tf_.setOrigin( tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()) );
-    // TODO: fix rotation to only change the yaw of the rotation
+//    float d = sticking_distance_ + cylinder_radius_;
+//    float c = d/sinf(0.349069);
+//    float snap_z = cylinder_pos.z() +  0.25f * sqrtf(c*c - d*d);
+//    std::cout << snap_z << std::endl;
+    snap_goal_tf_.setOrigin(tf::Vector3(proj_pos.x(), proj_pos.y(), cylinder_pos.z() + 1.0)); //snap_goal_tf_.setOrigin(tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()));
     snap_goal_tf_.setRotation(surface_tf_.getRotation());
 
     // rviz debug

@@ -849,7 +849,6 @@ void SurfaceDetection::publishCylinder()
     Plane proj_plane2(planeCoefficients2);
     Eigen::Vector3f intersection2 = proj_plane2.rayIntersection(cylinder_point, cylinder_direction);
 
-//    intersection = intersection2;
     if((intersection-camPlanePoint).squaredNorm() > (intersection2-camPlanePoint).squaredNorm()) {
         intersection = intersection2;
     }
@@ -898,7 +897,6 @@ void SurfaceDetection::publishCylinder()
 
 void SurfaceDetection::configCallback(te_surface_detection::generalConfig &config, uint32_t level)
 {
-
     std::cout << "Configurating." << std::endl;
 
     scaledDepthVarTH_ = pow(10.0f , config.scaledDepthVarTH );
