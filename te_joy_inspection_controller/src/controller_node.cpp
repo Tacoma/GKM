@@ -246,7 +246,7 @@ void Controller::takeoffAndHover()
 void Controller::processSurfaceMsg(const surface_detection_msgs::Surface::ConstPtr& msg)
 {
     if(surfaceType_ == plane) {
-        // realtive plane transform
+        // relative plane transform
         // planeToCam = surface_tf
         surface_tf_.setOrigin( tf::Vector3(msg->transform.translation.x, msg->transform.translation.y, msg->transform.translation.z) );
         surface_tf_.setRotation( tf::Quaternion(msg->transform.rotation.x, msg->transform.rotation.y, msg->transform.rotation.z, msg->transform.rotation.w) );

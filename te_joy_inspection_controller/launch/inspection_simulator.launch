@@ -36,6 +36,7 @@
       <remap from="odometry" to="msf_core/odometry"/>
       <param name="control_interface/verbose" value="true"/>
       <rosparam file="$(find euroc_launch)/parameters/common/linear_mpc_neo.yaml"/>
+      <param name="controller/mass" value="2.9" />
       <param name="capability_group" value="Core"/>
     </node>
     <node name="PD_attitude_controller" pkg="mav_linear_mpc" type="PD_attitude_controller_node" respawn="true"
