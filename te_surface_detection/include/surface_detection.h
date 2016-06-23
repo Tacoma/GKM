@@ -8,8 +8,6 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 // msgs
-#include <lsd_slam_msgs/keyframeMsg.h>
-#include <lsd_slam_msgs/keyframeGraphMsg.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Int32.h>
 #include <visualization_msgs/Marker.h>
@@ -40,13 +38,12 @@ public:
     ~SurfaceDetection();
 
 private:
-    void update(const lsd_slam_msgs::keyframeMsgConstPtr msg);
+    void update();
     void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
     void setSurfaceType(const std_msgs::Int32::ConstPtr& msg);
-    void processMessage(const lsd_slam_msgs::keyframeMsgConstPtr msg);
-    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud);
-    void processPointcloud(const lsd_slam_msgs::keyframeMsgConstPtr msg, MyPointcloud::Ptr cloud,
-                           Eigen::Vector2i min, Eigen::Vector2i max);
+    void processMessage();
+    void processPointcloud(MyPointcloud::Ptr cloud);
+    void processPointcloud(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
     void refinePlane(MyPointcloud::Ptr cloud);
     void findCylinder(MyPointcloud::Ptr cloud, unsigned int num_cylinders=1);
@@ -59,9 +56,6 @@ private:
     void reset();
 
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
-    inline void getProcessWindow(Eigen::Vector2i &min_out, Eigen::Vector2i &max_out, 
-				 float windowSize, float windowOffset, 
-				 int width, int height);
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
     void configCallback(te_surface_detection::generalConfig &config, uint32_t level);
@@ -76,15 +70,12 @@ private:
     ros::NodeHandle private_nh_;
     tf::TransformListener subTf_;
 
-    ros::Subscriber subKeyframes_;     // lsd_slam/keyframes
-    ros::Subscriber subLiveframes_;    // lsd_slam/liveframes
-    ros::Subscriber subStickToSurface_;      // gets sticking bool from joystick
-    ros::Subscriber subSurfaceType_;      // gets sticking bool from joystick
-    ros::Publisher pubPc_;     // maybe need a method to publish meshes for ros
-    ros::Publisher pubMarkers_;
-    ros::Publisher pubTf_;	// publish wall position
-    ros::Publisher pubCylinder_;
-
+    ros::Subscriber subLiveframes_;         // lsd_slam/liveframes
+    ros::Subscriber subStickToSurface_;     // gets sticking bool from joystick
+    ros::Subscriber subSurfaceType_;        // gets surface type from joystick
+    ros::Publisher pubPc_;                  // debug pointclouds
+    ros::Publisher pubTf_;                  // publish surface position
+    ros::Publisher pubCylinder_;            // publish surface marker
 
 #ifdef VISUALIZE
 	// in world frame
@@ -125,7 +116,9 @@ private:
     Eigen::Matrix4f opticalToSensor_;
     Eigen::Affine3f sensorToMav_;
     Eigen::Affine3f mavToWorld_;
+    Eigen::Affine3f camToWorld_;
     std::string mavTFName_;
+    std::string mavTFCameraName_;
     
     int status;
 };
