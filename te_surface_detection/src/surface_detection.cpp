@@ -39,7 +39,6 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                       };
 
 
-
 SurfaceDetection::SurfaceDetection() :
     scaledDepthVarTH_(-1),
     absDepthVarTH_(-1),
@@ -58,11 +57,11 @@ SurfaceDetection::SurfaceDetection() :
 
     // subscriber and publisher
     /// CHANGE TO KINECT POINTCLOUDS
-    subLiveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);    // euroc_hex/kinect/depth/points
+//    subLiveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);    // euroc_hex/kinect/depth/points
     ///
     subStickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
     subSurfaceType_ = nh_.subscribe<std_msgs::Int32>("controller/surfaceType", 10, &SurfaceDetection::setSurfaceType, this);
-    pubPc_ = private_nh_.advertise<pcl::PointCloud<MyPoint>>("meshPc", 10);
+    pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
     pubTf_ = private_nh_.advertise<surface_detection_msgs::Surface>("surface", 10);
     pubCylinder_ = private_nh_.advertise<visualization_msgs::Marker>("cylinder", 10);
 
@@ -132,9 +131,9 @@ void SurfaceDetection::setSearchPlane(const std_msgs::Bool::ConstPtr& msg)
     }
     reset();
     searchSurface_ = msg->data;
-    if (lastMsg_) {
-        processMessage(lastMsg_);
-    }
+//    if (lastMsg_) {
+//        processMessage(lastMsg_);
+//    }
 }
 
 void SurfaceDetection::setSurfaceType(const std_msgs::Int32::ConstPtr& msg)
@@ -144,16 +143,17 @@ void SurfaceDetection::setSurfaceType(const std_msgs::Int32::ConstPtr& msg)
     }
     reset();
     surfaceType_ = msg->data;
-    if (lastMsg_) {
-        processMessage(lastMsg_);
-    }
+//    if (lastMsg_) {
+//        processMessage(lastMsg_);
+//    }
 }
 
 void SurfaceDetection::update()
 {    
 //    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
-    UpdateCamToWorld();
-    currentPose_ = camToWorld_;
+    updateCamToWorld();
+    // TODO: convert Eigen::Affine3f to Eigen::Matrix4f
+//    currentPose_ = camToWorld_.matrix();
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     // Transform surface into new frame
@@ -170,53 +170,7 @@ void SurfaceDetection::update()
 
 void SurfaceDetection::processMessage()
 {
-//    if (msg->isKeyframe) {
-//        // Transform the surface into the new frame
-//        update(msg);
-//        lastMsg_ = msg;
-//        pcVisDebug_ = boost::make_shared<MyPointcloud>();
-//        if(searchSurface_) {
-//            MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
-//            // Find the largest plane only if no plane exists
-//            if(!surfaceExists_) {
-//                Eigen::Vector2i min, max;
-//                // Search in small window
-//                getProcessWindow(min, max, windowSize_, windowPosY_, msg->width, msg->height);
-//                processPointcloud(msg, cloud, min, max);
-//                if (surfaceType_ == 1) {
-//                    findPlanes(cloud, 1);
-//                }
-//                if (surfaceType_ == 2) {
-//                    findCylinder(cloud, 1);
-//                }
-//            }
-//            // We don't want to call refine Plane for the same message
-//            else {
-//                // Transform and refine the plane with new inliers, searching in whole pointcloud
-//                processPointcloud(msg, cloud);
-//                if (surfaceType_ == 1) {
-//                    refinePlane(cloud);
-//                }
-//                if (surfaceType_ == 2) {
-//                    refineCylinder(cloud);
-//                }
-//            }
-//            pcl::transformPointCloud(*cloud, *cloud,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
-//            //*pcVisDebug_ += *cloud;
-//            publishPointclouds();
-//        }
-//    // !isKeyframe
-//    } else {
-//        // check for reset
-//        if (lastFrameId_ > msg->id) {
-//            ROS_INFO_STREAM("detected backward-jump in id (" << lastFrameId_ << " to " << msg->id << "), resetting!");
-//            lastFrameId_ = 0;
-//            reset();
-//        }
-//        lastFrameId_ = msg->id;
-//    }
     update();
-
     if(searchSurface_) {
         MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
 
@@ -253,126 +207,19 @@ void SurfaceDetection::processMessage()
 
 void SurfaceDetection::processPointcloud(MyPointcloud::Ptr cloud)
 {
-    cloud->id = msg->id;
-    cloud->resize(width*height);
-
-    MyPoint point;
-    point.x = (x*fxi + cxi) * depth;
-    point.y = (y*fyi + cyi) * depth;
-    point.z = depth;
-    point.r = originalInput_[x+y*width].color[2];
-    point.g = originalInput_[x+y*width].color[1];
-    point.b = originalInput_[x+y*width].color[0];
-    cloud->points[numPoints] = point;
-    cloud->resize(numPoints);
-}
-
-
-void SurfaceDetection::processPointcloud(MyPointcloud::Ptr cloud)
-{
-//    // get lsd_slam pose estimate
-//    Sophus::Sim3f pose;
-//    memcpy(pose.data(), msg->camToWorld.data(), 7*sizeof(float));
-
-//    // get ground_truth pose
-//    try {
-//        ros::Time now = ros::Time::now();
-//        tf::StampedTransform tf;
-//        subTf_.waitForTransform("/world", mavTFName_, now, ros::Duration(0.5));
-//        subTf_.lookupTransform("/world", mavTFName_, now, tf);
-//        Eigen::Affine3d temp;
-//        tf::transformTFToEigen(tf, temp);
-//        mavToWorld_ = temp.cast<float>();
-//    }
-//    catch (tf::TransformException ex) {
-//        ROS_ERROR("%s",ex.what());
-//    }
-
-//    float fxi = 1.0/msg->fx;
-//    float fyi = 1.0/msg->fy;
-//    float cxi = -msg->cx / msg->fx;
-//    float cyi = -msg->cy / msg->fy;
-//    int width  = msg->width;
-//    int height = msg->height;
-
 //    cloud->id = msg->id;
-////    double time = msg->time;
-
-//    InputPointDense* originalInput_ = 0;
-
-//    if(msg->pointcloud.size() != width*height*sizeof(InputPointDense)) {
-//        if(msg->pointcloud.size() != 0)
-//            ROS_WARN_STREAM("PC with points, but number of points not right!");
-//    } else {
-//        originalInput_ = new InputPointDense[width*height];
-//        memcpy(originalInput_, msg->pointcloud.data(), width*height*sizeof(InputPointDense));
-//    }
-
-//    if(originalInput_ == 0) {
-//        ROS_ERROR_STREAM("originalInput_ was null");
-//        return;
-//    }
-
-//    clampProcessWindow(min, max, width, height);
-//    float worldScale = pose.scale();
-
 //    cloud->resize(width*height);
-//    int numPoints = 0;
-//    for(int y=min.y(); y<max.y(); y++) {
-//        for(int x=min.x(); x<max.x(); x++) {
 
-//            if(originalInput_[x+y*width].idepth <= 0) {
-//                continue;
-//            }
-//            if(sparsifyFactor_ > 1 && rand()%sparsifyFactor_ != 0) {
-//                continue;
-//            }
-
-//            float depth = 1 / originalInput_[x+y*width].idepth;
-//            float depth4 = depth*depth;
-//            depth4*= depth4;
-
-//            if(originalInput_[x+y*width].idepth_var * depth4 > scaledDepthVarTH_) {
-//                continue;
-//            }
-//            if(originalInput_[x+y*width].idepth_var * depth4 * worldScale*worldScale > absDepthVarTH_) {
-//                continue;
-//            }
-
-//            if(minNearSupport_ > 1) {
-//                int nearSupport = 0;
-//                for(int dx=-1; dx<2; dx++) {
-//                    for(int dy=-1; dy<2; dy++) {
-//                        int idx = x+dx+(y+dy)*width;
-//                        if(originalInput_[idx].idepth > 0) {
-//                            float diff = originalInput_[idx].idepth - 1.0f / depth;
-//                            if(diff*diff < 2*originalInput_[x+y*width].idepth_var)
-//                                nearSupport++;
-//                        }
-//                    }
-//                }
-//                if(nearSupport < minNearSupport_) {
-//                    continue;
-//                }
-//            }
-
-//            MyPoint point;
-//            point.x = (x*fxi + cxi) * depth;
-//            point.y = (y*fyi + cyi) * depth;
-//            point.z = depth;
-//            point.r = originalInput_[x+y*width].color[2];
-//            point.g = originalInput_[x+y*width].color[1];
-//            point.b = originalInput_[x+y*width].color[0];
-//            cloud->points[numPoints] = point;
-
-//            numPoints++;
-//        } // x
-//    } // y
-//    // refit pointcloud and search for planes
+//    MyPoint point;
+//    point.x = (x*fxi + cxi) * depth;
+//    point.y = (y*fyi + cyi) * depth;
+//    point.z = depth;
+//    point.r = originalInput_[x+y*width].color[2];
+//    point.g = originalInput_[x+y*width].color[1];
+//    point.b = originalInput_[x+y*width].color[0];
+//    cloud->points[numPoints] = point;
 //    cloud->resize(numPoints);
-//    delete[] originalInput_;
 }
-
 
 /**
  * looks for numSurfaces planes in cloud_in and returns all points in these planes,
@@ -713,7 +560,7 @@ void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
 }
 
 
-void UpdateCamToWorld()
+void SurfaceDetection::updateCamToWorld()
 {
     try {
         ros::Time now = ros::Time::now();
@@ -925,11 +772,6 @@ void SurfaceDetection::configCallback(te_surface_detection::generalConfig &confi
     //minPointsForEstimation_ = config.minPointsForEstimation;
     //noisePercentage_ = 1-config.planarPercentage;
     //maxPlanesPerCloud_ = config.maxPlanesPerCloud;
-
-    // apply changes to last message
-    if (lastMsg_) {
-        processMessage(lastMsg_);
-    }
 }
 
 

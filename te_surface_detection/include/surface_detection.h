@@ -42,7 +42,7 @@ private:
     void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
     void setSurfaceType(const std_msgs::Int32::ConstPtr& msg);
     void processMessage();
-    void processPointcloud(MyPointcloud::Ptr cloud);
+    void processPointcloud();
     void processPointcloud(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
     void refinePlane(MyPointcloud::Ptr cloud);
@@ -55,6 +55,7 @@ private:
     void publishCylinder();
     void reset();
 
+    void updateCamToWorld();
     inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
@@ -70,7 +71,7 @@ private:
     ros::NodeHandle private_nh_;
     tf::TransformListener subTf_;
 
-    ros::Subscriber subLiveframes_;         // lsd_slam/liveframes
+//    ros::Subscriber subLiveframes_;         // lsd_slam/liveframes
     ros::Subscriber subStickToSurface_;     // gets sticking bool from joystick
     ros::Subscriber subSurfaceType_;        // gets surface type from joystick
     ros::Publisher pubPc_;                  // debug pointclouds
@@ -107,7 +108,6 @@ private:
 
     // Stuff
     int nextColor_;
-    lsd_slam_msgs::keyframeMsgConstPtr lastMsg_;
     unsigned int lastFrameId_;
     
     // Transforms
