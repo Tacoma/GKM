@@ -63,10 +63,6 @@ public:
     {
         point_ = transform * point_;
         dir_ = transform * dir_;
-
-//        Sophus::Sim3f scaleTransform;
-//        memcpy(scaleTransform.data(), transform.data(), 7*sizeof(float));
-//        radius_ = scaleTransform.scale() * radius_;
     }
     
     static void transformCylinder(const Eigen::Matrix4f transform, Eigen::VectorXf &coefficients) {

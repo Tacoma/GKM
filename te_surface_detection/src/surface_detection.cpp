@@ -153,7 +153,7 @@ void SurfaceDetection::update()
 //    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
     updateCamToWorld();
     // TODO: convert Eigen::Affine3f to Eigen::Matrix4f
-//    currentPose_ = camToWorld_.matrix();
+    currentPose_ = camToWorld_.matrix();
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     // Transform surface into new frame

@@ -111,8 +111,8 @@ private:
     unsigned int lastFrameId_;
     
     // Transforms
-    Sophus::Sim3f lastPose_;
-    Sophus::Sim3f currentPose_;
+    Eigen::Matrix4f lastPose_;
+    Eigen::Matrix4f currentPose_;
     Eigen::Matrix4f opticalToSensor_;
     Eigen::Affine3f sensorToMav_;
     Eigen::Affine3f mavToWorld_;
