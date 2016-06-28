@@ -41,8 +41,7 @@ private:
     void update();
     void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
     void setSurfaceType(const std_msgs::Int32::ConstPtr& msg);
-    void processMessage();
-    void processPointcloud();
+    void processMessage(pcl::PointCloud<MyPoint> msg);
     void processPointcloud(MyPointcloud::Ptr cloud);
     void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
     void refinePlane(MyPointcloud::Ptr cloud);
@@ -71,7 +70,7 @@ private:
     ros::NodeHandle private_nh_;
     tf::TransformListener subTf_;
 
-//    ros::Subscriber subLiveframes_;         // lsd_slam/liveframes
+    ros::Subscriber subLiveframes_;         // lsd_slam/liveframes
     ros::Subscriber subStickToSurface_;     // gets sticking bool from joystick
     ros::Subscriber subSurfaceType_;        // gets surface type from joystick
     ros::Publisher pubPc_;                  // debug pointclouds

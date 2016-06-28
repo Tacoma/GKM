@@ -56,9 +56,7 @@ SurfaceDetection::SurfaceDetection() :
     private_nh_ = ros::NodeHandle("~");
 
     // subscriber and publisher
-    /// CHANGE TO KINECT POINTCLOUDS
-//    subLiveframes_ = nh_.subscribe(nh_.resolveName("lsd_slam/liveframes"), 10, &SurfaceDetection::processMessage, this);    // euroc_hex/kinect/depth/points
-    ///
+    subLiveframes_ = nh_.subscribe< pcl::PointCloud<MyPoint> >("/euroc_hex/kinect/kinect/depth/points", 10, &SurfaceDetection::processMessage,this);
     subStickToSurface_ = nh_.subscribe<std_msgs::Bool>("controller/stickToSurface", 10, &SurfaceDetection::setSearchPlane, this);
     subSurfaceType_ = nh_.subscribe<std_msgs::Int32>("controller/surfaceType", 10, &SurfaceDetection::setSurfaceType, this);
     pubPc_ = private_nh_.advertise< pcl::PointCloud<MyPoint> >("meshPc", 10);
@@ -168,7 +166,7 @@ void SurfaceDetection::update()
     lastPose_ = currentPose_;
 }
 
-void SurfaceDetection::processMessage()
+void SurfaceDetection::processMessage(pcl::PointCloud<MyPoint> msg)
 {
     update();
     if(searchSurface_) {
@@ -198,7 +196,11 @@ void SurfaceDetection::processMessage()
         }
         publishPointclouds();
     }
-    
+
+    MyPointcloud::Ptr tmp = boost::make_shared<MyPointcloud>(MyPointcloud(msg));
+    *pcVisDebug_ = *tmp;
+    publishPointclouds();
+
     //publish plane
     publishCylinder();
     publishPlane();
