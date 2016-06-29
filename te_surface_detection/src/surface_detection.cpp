@@ -78,29 +78,24 @@ SurfaceDetection::SurfaceDetection() :
     pcVisDebug_ = boost::make_shared<MyPointcloud>();
     searchSurface_ = false;
     surfaceExists_ = false;
+
     opticalToSensor_ = Eigen::Matrix4f::Identity();
     // (row, column)
-    opticalToSensor_ (0,0) = 0;
-    opticalToSensor_ (0,1) = 0;
-    opticalToSensor_ (0,2) = 1;
-    opticalToSensor_ (1,0) =-1;
-    opticalToSensor_ (1,1) = 0;
-    opticalToSensor_ (1,2) = 0;
-    opticalToSensor_ (2,0) = 0;
-    opticalToSensor_ (2,1) =-1;
-    opticalToSensor_ (2,2) = 0;
+    opticalToSensor_ (0,0) = 0; opticalToSensor_ (0,1) = 0; opticalToSensor_ (0,2) = 1;
+    opticalToSensor_ (1,0) =-1; opticalToSensor_ (1,1) = 0; opticalToSensor_ (1,2) = 0;
+    opticalToSensor_ (2,0) = 0; opticalToSensor_ (2,1) =-1; opticalToSensor_ (2,2) = 0;
+
     status = -1;
 
     sensorToMav_ = Eigen::Affine3f::Identity();
-    // old sensor
-//    sensorToMav_.translation() << 0.133,0,0.0605-0.117;
-//    sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
-    // kinect sensor
     sensorToMav_.translation() << 0.0, 0.0, 0.0;
     Eigen::Matrix3f m;
-    m = Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ())
+//    m = Eigen::AngleAxisf(0.0, Eigen::Vector3f::UnitZ())
+//            * Eigen::AngleAxisf(0.5 * M_PI, Eigen::Vector3f::UnitY())
+//            * Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ());
+    m = Eigen::AngleAxisf(0.0, Eigen::Vector3f::UnitZ())
             * Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitY())
-            * Eigen::AngleAxisf(0.0, Eigen::Vector3f::UnitZ());
+            * Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ());
     sensorToMav_.rotate(Eigen::Quaternionf(m));
 
     // Setting up Dynamic Reconfiguration
@@ -183,7 +178,7 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
     if(searchSurface_) {
         pcVisDebug_ = boost::make_shared<MyPointcloud>();
         pcLastCloud_ = boost::make_shared<MyPointcloud>(*msg);
-//        boost::shared_ptr<MyPointcloud> cloud = boost::make_shared<MyPointcloud>();
+        pcl::transformPointCloud(*pcLastCloud_, *pcLastCloud_, sensorToMav_ * opticalToSensor_);
 
         // Find the largest plane only if no plane exists
         if(!surfaceExists_) {
@@ -294,8 +289,10 @@ void SurfaceDetection::findPlanes(boost::shared_ptr<MyPointcloud> cloud, unsigne
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
-    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_);
+    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_);
     *pcVisSurfaces_ = *pcVisSurfaces;
     *pcVisOutliers_ = *pcCropped;
 #endif
@@ -361,7 +358,8 @@ void SurfaceDetection::refinePlane(boost::shared_ptr<MyPointcloud> cloud)
     extract.filter(*pcFiltered);
 
     // transform pointcloud from optical to world
-    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_);
     *pcVisDebug_ += *pcFiltered;
 }
 
@@ -474,8 +472,10 @@ void SurfaceDetection::findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsig
 
 #ifdef VISUALIZE
     // Add pointcloud keyframe to the accumulated pointclouds depending on planar property
-    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
-    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_);
+    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_);
     *pcVisSurfaces_ = *pcVisSurfaces;
     *pcVisOutliers_ = *pcCropped;
 #endif
@@ -519,7 +519,8 @@ void SurfaceDetection::refineCylinder(boost::shared_ptr<MyPointcloud> cloud)
     extract.filter(*pcFiltered);
 
     // transform pointcloud from optical to world
-    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+    pcl::transformPointCloud(*pcFiltered, *pcFiltered,  mavToWorld_);
     *pcVisDebug_ += *pcFiltered;
 
     // ...refit the cylinder with new points only, if enough points were found.
@@ -665,7 +666,7 @@ void SurfaceDetection::publishPlane()
 
     
     //visualization
-    Plane::transformPlane(sensorToMav_ * opticalToSensor_, intersection, plane_normal);
+//    Plane::transformPlane(sensorToMav_ * opticalToSensor_, intersection, plane_normal);
     plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), plane_normal);
 
     visualization_msgs::Marker marker;
