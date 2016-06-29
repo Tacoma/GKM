@@ -162,7 +162,7 @@ void SurfaceDetection::update()
 //    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
     updateCamToWorld();
     updateMavToWorld();
-    currentPose_ = camToWorld_.matrix();
+    currentPose_ = /*camToWorld_*/ mavToWorld_.matrix();
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     // Transform surface into new frame
@@ -181,10 +181,6 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
 {
     update();
     if(searchSurface_) {
-#ifdef VISUALIZE
-        pcVisSurfaces_ = boost::make_shared<MyPointcloud>();
-        pcVisOutliers_ = boost::make_shared<MyPointcloud>();
-#endif
         pcVisDebug_ = boost::make_shared<MyPointcloud>();
         pcLastCloud_ = boost::make_shared<MyPointcloud>(*msg);
 //        boost::shared_ptr<MyPointcloud> cloud = boost::make_shared<MyPointcloud>();
@@ -209,13 +205,8 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
                 refineCylinder(pcLastCloud_);
             }
         }
-//        publishPointclouds();
+        publishPointclouds();
     }
-
-//    boost::shared_ptr<MyPointcloud> tmp = boost::make_shared<MyPointcloud>(MyPointcloud(*msg));
-//    pcl::transformPointCloud(*pcLastCloud_, *pcLastCloud_,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
-//    *pcVisDebug_ = *pcLastCloud_;
-//    publishPointclouds();
 
     //publish plane
     publishCylinder();
@@ -248,7 +239,7 @@ void SurfaceDetection::findPlanes(boost::shared_ptr<MyPointcloud> cloud, unsigne
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setMaxIterations(100);
+    seg.setMaxIterations(10);
     seg.setDistanceThreshold(distanceThreshold_);
 
     // Extract the planar inliers from the input cloud
@@ -666,6 +657,12 @@ void SurfaceDetection::publishPlane()
     tf.radius = 0.1f; // not used for planes
     pubTf_.publish(tf);
 
+    static tf::TransformBroadcaster br;
+    tf::Transform debugTf;
+    debugTf.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z()) );
+    debugTf.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()) );
+    br.sendTransform(tf::StampedTransform(debugTf, ros::Time::now(), mavTFName_, "debug/plane"));
+
     
     //visualization
     Plane::transformPlane(sensorToMav_ * opticalToSensor_, intersection, plane_normal);
@@ -690,7 +687,7 @@ void SurfaceDetection::publishPlane()
     marker.color.r = 0.0;
     marker.color.g = 1.0;
     marker.color.b = 0.0;
-    marker.color.a = 0.3; // Don't forget to set the alpha!
+    marker.color.a = 0.3;
     pubCylinder_.publish( marker );
 }
 
