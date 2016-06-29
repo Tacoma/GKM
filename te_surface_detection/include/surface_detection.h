@@ -41,12 +41,11 @@ private:
     void update();
     void setSearchPlane(const std_msgs::Bool::ConstPtr& msg);
     void setSurfaceType(const std_msgs::Int32::ConstPtr& msg);
-    void processMessage(pcl::PointCloud<MyPoint> msg);
-    void processPointcloud(MyPointcloud::Ptr cloud);
-    void findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces=1);
-    void refinePlane(MyPointcloud::Ptr cloud);
-    void findCylinder(MyPointcloud::Ptr cloud, unsigned int num_cylinders=1);
-    void refineCylinder(MyPointcloud::Ptr cloud);
+    void processMessage(const pcl::PointCloud<MyPoint>::ConstPtr& msg);
+    void findPlanes(boost::shared_ptr<MyPointcloud> cloud, unsigned int numSurfaces=1);
+    void refinePlane(boost::shared_ptr<MyPointcloud> cloud);
+    void findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsigned int num_cylinders=1);
+    void refineCylinder(boost::shared_ptr<MyPointcloud> cloud);
     
     void publishPointclouds();
     void publishPolygons();
@@ -55,7 +54,8 @@ private:
     void reset();
 
     void updateCamToWorld();
-    inline void colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color);
+    void updateMavToWorld();
+    inline void colorPointcloud(boost::shared_ptr<MyPointcloud> cloud_in, Eigen::Vector3f color);
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
     void configCallback(te_surface_detection::generalConfig &config, uint32_t level);
@@ -77,19 +77,20 @@ private:
     ros::Publisher pubTf_;                  // publish surface position
     ros::Publisher pubCylinder_;            // publish surface marker
 
+    boost::shared_ptr<MyPointcloud> pcLastCloud_;
 #ifdef VISUALIZE
 	// in world frame
-    MyPointcloud::Ptr pcVisSurfaces_;
-    MyPointcloud::Ptr pcVisOutliers_;
+    boost::shared_ptr<MyPointcloud> pcVisSurfaces_;
+    boost::shared_ptr<MyPointcloud> pcVisOutliers_;
 #endif
 	// in world frame
-    MyPointcloud::Ptr pcVisDebug_;
+    boost::shared_ptr<MyPointcloud> pcVisDebug_;
 
     // Planes
-    Plane::Ptr plane_;
     int surfaceType_; // 1 = plane, 2 = cylinder
     bool searchSurface_;
     bool surfaceExists_;
+    Plane::Ptr plane_;
     Cylinder::Ptr cylinder_;
 
     // Parameters

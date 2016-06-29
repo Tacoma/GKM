@@ -3,19 +3,20 @@
 
 typedef pcl::PointXYZRGB MyPoint;
 typedef pcl::Normal MyNormal;
+typedef pcl::PointCloud<MyPoint> MyPointcloud;
 
-class MyPointcloud : public pcl::PointCloud<MyPoint>
-{
-public:
-    MyPointcloud ()
-    {}
-    MyPointcloud (pcl::PointCloud<MyPoint>& cloud)
-        : pcl::PointCloud<MyPoint>(cloud)
-    {}
+//class MyPointcloud : public pcl::PointCloud<MyPoint>
+//{
+//public:
+//    MyPointcloud ()
+//    {}
+//    MyPointcloud (pcl::PointCloud<MyPoint>& cloud)
+//        : pcl::PointCloud<MyPoint>(cloud)
+//    {}
 
-    typedef boost::shared_ptr<MyPointcloud> Ptr;
-    int id;
-};
+//    typedef boost::shared_ptr<MyPointcloud> Ptr;
+//    int id;
+//};
 
 class MyNormalcloud : public pcl::PointCloud<MyNormal>
 {

@@ -38,6 +38,9 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                         Eigen::Vector3f(  0,  0,128)
                                       };
 
+// TODO:
+// - add lastMsg_ again
+// - change subsribed pc from color to bw
 
 SurfaceDetection::SurfaceDetection() :
     scaledDepthVarTH_(-1),
@@ -89,8 +92,16 @@ SurfaceDetection::SurfaceDetection() :
     status = -1;
 
     sensorToMav_ = Eigen::Affine3f::Identity();
-    sensorToMav_.translation() << 0.133,0,0.0605-0.117;
-    sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
+    // old sensor
+//    sensorToMav_.translation() << 0.133,0,0.0605-0.117;
+//    sensorToMav_.rotate(Eigen::Quaternionf(0.98481,0,0.17365,0));
+    // kinect sensor
+    sensorToMav_.translation() << 0.0, 0.0, 0.0;
+    Eigen::Matrix3f m;
+    m = Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ())
+            * Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitY())
+            * Eigen::AngleAxisf(0.0, Eigen::Vector3f::UnitZ());
+    sensorToMav_.rotate(Eigen::Quaternionf(m));
 
     // Setting up Dynamic Reconfiguration
     dynamic_reconfigure::Server<te_surface_detection::generalConfig>::CallbackType f;
@@ -150,7 +161,7 @@ void SurfaceDetection::update()
 {    
 //    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
     updateCamToWorld();
-    // TODO: convert Eigen::Affine3f to Eigen::Matrix4f
+    updateMavToWorld();
     currentPose_ = camToWorld_.matrix();
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
@@ -166,40 +177,45 @@ void SurfaceDetection::update()
     lastPose_ = currentPose_;
 }
 
-void SurfaceDetection::processMessage(pcl::PointCloud<MyPoint> msg)
+void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
 {
     update();
     if(searchSurface_) {
-        MyPointcloud::Ptr cloud = boost::make_shared<MyPointcloud>();
+#ifdef VISUALIZE
+        pcVisSurfaces_ = boost::make_shared<MyPointcloud>();
+        pcVisOutliers_ = boost::make_shared<MyPointcloud>();
+#endif
+        pcVisDebug_ = boost::make_shared<MyPointcloud>();
+        pcLastCloud_ = boost::make_shared<MyPointcloud>(*msg);
+//        boost::shared_ptr<MyPointcloud> cloud = boost::make_shared<MyPointcloud>();
 
         // Find the largest plane only if no plane exists
         if(!surfaceExists_) {
             // Search
-            processPointcloud(cloud);
             if (surfaceType_ == 1) {
-                findPlanes(cloud, 1);
+                findPlanes(pcLastCloud_, 1);
             }
             if (surfaceType_ == 2) {
-                findCylinder(cloud, 1);
+                findCylinder(pcLastCloud_, 1);
             }
         }
         // We don't want to call refine Plane for the same message
         else {
             // Transform and refine the plane with new inliers, searching in whole pointcloud
-            processPointcloud(cloud);
             if (surfaceType_ == 1) {
-                refinePlane(cloud);
+                refinePlane(pcLastCloud_);
             }
             if (surfaceType_ == 2) {
-                refineCylinder(cloud);
+                refineCylinder(pcLastCloud_);
             }
         }
-        publishPointclouds();
+//        publishPointclouds();
     }
 
-    MyPointcloud::Ptr tmp = boost::make_shared<MyPointcloud>(MyPointcloud(msg));
-    *pcVisDebug_ = *tmp;
-    publishPointclouds();
+//    boost::shared_ptr<MyPointcloud> tmp = boost::make_shared<MyPointcloud>(MyPointcloud(*msg));
+//    pcl::transformPointCloud(*pcLastCloud_, *pcLastCloud_,  mavToWorld_ * sensorToMav_ * opticalToSensor_);
+//    *pcVisDebug_ = *pcLastCloud_;
+//    publishPointclouds();
 
     //publish plane
     publishCylinder();
@@ -207,36 +223,20 @@ void SurfaceDetection::processMessage(pcl::PointCloud<MyPoint> msg)
 }
 
 
-void SurfaceDetection::processPointcloud(MyPointcloud::Ptr cloud)
-{
-//    cloud->id = msg->id;
-//    cloud->resize(width*height);
-
-//    MyPoint point;
-//    point.x = (x*fxi + cxi) * depth;
-//    point.y = (y*fyi + cyi) * depth;
-//    point.z = depth;
-//    point.r = originalInput_[x+y*width].color[2];
-//    point.g = originalInput_[x+y*width].color[1];
-//    point.b = originalInput_[x+y*width].color[0];
-//    cloud->points[numPoints] = point;
-//    cloud->resize(numPoints);
-}
-
 /**
  * looks for numSurfaces planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
  */
-void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfaces)
+void SurfaceDetection::findPlanes(boost::shared_ptr<MyPointcloud> cloud, unsigned int numSurfaces)
 {
     std::cout << "Searching " << numSurfaces << " plane(s) in " << cloud->size() << " points.";
     // Init
-    MyPointcloud::Ptr pcCropped = cloud;
+    boost::shared_ptr<MyPointcloud> pcCropped = cloud;
     int size = cloud->size();
     // Allocation
-    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcFiltered = boost::make_shared<MyPointcloud>();
 #ifdef VISUALIZE
-    MyPointcloud::Ptr pcVisSurfaces = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcVisSurfaces = boost::make_shared<MyPointcloud>();
 #endif
 
 
@@ -311,10 +311,10 @@ void SurfaceDetection::findPlanes(MyPointcloud::Ptr cloud, unsigned int numSurfa
 }
 
 
-void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
+void SurfaceDetection::refinePlane(boost::shared_ptr<MyPointcloud> cloud)
 {
     // Init
-    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcFiltered = boost::make_shared<MyPointcloud>();
 
     // Create the planar model and set all the parameters
     pcl::SampleConsensusModelPlane<MyPoint>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPlane<MyPoint> >(cloud);
@@ -379,16 +379,16 @@ void SurfaceDetection::refinePlane(MyPointcloud::Ptr cloud)
  * looks for numSurfaces planes in cloud_in and returns all points in these planes,
  * colored to the corresponding plane.
  */
-void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSurfaces)
+void SurfaceDetection::findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsigned int numSurfaces)
 {
     std::cout << "Searching " << numSurfaces << " cylinder in " << cloud->size() << " points.";
     // Init
-    MyPointcloud::Ptr pcCropped = cloud;
+    boost::shared_ptr<MyPointcloud> pcCropped = cloud;
     int size = cloud->size();
     // Allocation
-    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcFiltered = boost::make_shared<MyPointcloud>();
 #ifdef VISUALIZE
-    MyPointcloud::Ptr pcVisSurfaces = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcVisSurfaces = boost::make_shared<MyPointcloud>();
 #endif
     MyNormalcloud::Ptr normalsFiltered  = boost::make_shared<MyNormalcloud>();
     MyNormalcloud::Ptr normalsCropped = boost::make_shared<MyNormalcloud>();
@@ -491,10 +491,10 @@ void SurfaceDetection::findCylinder(MyPointcloud::Ptr cloud, unsigned int numSur
 }
 
 
-void SurfaceDetection::refineCylinder(MyPointcloud::Ptr cloud)
+void SurfaceDetection::refineCylinder(boost::shared_ptr<MyPointcloud> cloud)
 {
     // Init
-    MyPointcloud::Ptr pcFiltered = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcFiltered = boost::make_shared<MyPointcloud>();
 
     // Create the cylinder model and set all the parameters
     pcl::SampleConsensusModelCylinder<MyPoint, MyNormal>::Ptr model = boost::make_shared<pcl::SampleConsensusModelCylinder<MyPoint, MyNormal> >(cloud);
@@ -572,8 +572,23 @@ void SurfaceDetection::updateCamToWorld()
         Eigen::Affine3d temp;
         tf::transformTFToEigen(tf, temp);
         camToWorld_ = temp.cast<float>();
+    } catch (tf::TransformException ex) {
+        ROS_ERROR("%s",ex.what());
     }
-    catch (tf::TransformException ex) {
+}
+
+void SurfaceDetection::updateMavToWorld()
+{
+    // get ground_truth pose
+    try {
+        ros::Time now = ros::Time::now();
+        tf::StampedTransform tf;
+        subTf_.waitForTransform("/world", mavTFName_, now, ros::Duration(0.5));
+        subTf_.lookupTransform("/world", mavTFName_, now, tf);
+        Eigen::Affine3d temp;
+        tf::transformTFToEigen(tf, temp);
+        mavToWorld_ = temp.cast<float>();
+    } catch (tf::TransformException ex) {
         ROS_ERROR("%s",ex.what());
     }
 }
@@ -581,7 +596,7 @@ void SurfaceDetection::updateCamToWorld()
 // -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-inline void SurfaceDetection::colorPointcloud(MyPointcloud::Ptr cloud_in, Eigen::Vector3f color)
+inline void SurfaceDetection::colorPointcloud(boost::shared_ptr<MyPointcloud> cloud_in, Eigen::Vector3f color)
 {
     for(int i=0; i<cloud_in->points.size(); i++) {
         cloud_in->points[i].r = color.x();
@@ -609,7 +624,7 @@ inline int SurfaceDetection::clamp(int x, int min, int max)
 
 void SurfaceDetection::publishPointclouds()
 {
-    MyPointcloud::Ptr pcUnion = boost::make_shared<MyPointcloud>();
+    boost::shared_ptr<MyPointcloud> pcUnion = boost::make_shared<MyPointcloud>();
 
     *pcUnion += *pcVisDebug_;
 
