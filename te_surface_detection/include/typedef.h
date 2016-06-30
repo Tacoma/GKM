@@ -2,27 +2,15 @@
 #define TYPEDEF_H
 
 typedef pcl::PointXYZRGB MyPoint;
-typedef pcl::Normal MyNormal;
 typedef pcl::PointCloud<MyPoint> MyPointcloud;
+typedef pcl::Normal MyNormal;
+typedef pcl::PointCloud<MyNormal> MyNormalcloud;
 
-//class MyPointcloud : public pcl::PointCloud<MyPoint>
+//class MyNormalcloud : public pcl::PointCloud<MyNormal>
 //{
 //public:
-//    MyPointcloud ()
-//    {}
-//    MyPointcloud (pcl::PointCloud<MyPoint>& cloud)
-//        : pcl::PointCloud<MyPoint>(cloud)
-//    {}
-
-//    typedef boost::shared_ptr<MyPointcloud> Ptr;
-//    int id;
+//    typedef boost::shared_ptr<MyNormalcloud> Ptr;
 //};
-
-class MyNormalcloud : public pcl::PointCloud<MyNormal>
-{
-public:
-    typedef boost::shared_ptr<MyNormalcloud> Ptr;
-};
 
 typedef unsigned char uchar;
 

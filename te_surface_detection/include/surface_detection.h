@@ -58,7 +58,6 @@ private:
     inline void colorPointcloud(boost::shared_ptr<MyPointcloud> cloud_in, Eigen::Vector3f color);
     inline void clampProcessWindow(Eigen::Vector2i &min_inout, Eigen::Vector2i &max_inout, int width, int height);
     inline int clamp(int x, int min, int max);
-    void configCallback(te_surface_detection::generalConfig &config, uint32_t level);
 
 
 // --------------- members ---------------

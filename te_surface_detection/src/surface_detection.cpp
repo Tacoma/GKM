@@ -24,6 +24,8 @@
 #include <eigen3/Eigen/src/Core/Matrix.h>
 #include "surface_detection.h"
 
+#include <math.h>
+
 const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                         Eigen::Vector3f(  0,255,  0),
                                         Eigen::Vector3f(  0,  0,255),
@@ -39,8 +41,7 @@ const Eigen::Vector3f debugColors[] = { Eigen::Vector3f(255,  0,  0),
                                       };
 
 // TODO:
-// - add lastMsg_ again
-// - change subsribed pc from color to bw
+// - change subsribed from pc too depth image again
 
 SurfaceDetection::SurfaceDetection() :
     scaledDepthVarTH_(-1),
@@ -98,11 +99,6 @@ SurfaceDetection::SurfaceDetection() :
             * Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ());
     sensorToMav_.rotate(Eigen::Quaternionf(m));
 
-    // Setting up Dynamic Reconfiguration
-    dynamic_reconfigure::Server<te_surface_detection::generalConfig>::CallbackType f;
-    f = boost::bind(&SurfaceDetection::configCallback, this, _1, _2);
-    server_.setCallback(f);
-
     std::cout << "SurfaceDetection started..." << std::endl;
 }
 
@@ -153,11 +149,10 @@ void SurfaceDetection::setSurfaceType(const std_msgs::Int32::ConstPtr& msg)
 }
 
 void SurfaceDetection::update()
-{    
-//    memcpy(currentPose_.data(), msg->camToWorld.data(), 7*sizeof(float));
+{
     updateCamToWorld();
     updateMavToWorld();
-    currentPose_ = /*camToWorld_*/ mavToWorld_.matrix();
+    currentPose_ = mavToWorld_.matrix();
     Eigen::Matrix4f lastToCurrent = currentPose_.matrix().inverse() * lastPose_.matrix();
     
     // Transform surface into new frame
@@ -177,7 +172,17 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
     update();
     if(searchSurface_) {
         pcVisDebug_ = boost::make_shared<MyPointcloud>();
-        pcLastCloud_ = boost::make_shared<MyPointcloud>(*msg);
+        pcLastCloud_ = boost::make_shared<MyPointcloud>();
+
+        // subsample pointcloud and filter out NAN and INF values
+        for(int j=0; j<480; j+=8) {
+            for(int i=0; i<640; i+=8) {
+                //pcLastCloud_->push_back(msg->at(j*640+i));
+                MyPoint point = msg->at(j*640+i);
+                if(std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z))
+                    pcLastCloud_->push_back(point);
+            }
+        }
         pcl::transformPointCloud(*pcLastCloud_, *pcLastCloud_, sensorToMav_ * opticalToSensor_);
 
         // Find the largest plane only if no plane exists
@@ -185,8 +190,7 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
             // Search
             if (surfaceType_ == 1) {
                 findPlanes(pcLastCloud_, 1);
-            }
-            if (surfaceType_ == 2) {
+            } else if (surfaceType_ == 2) {
                 findCylinder(pcLastCloud_, 1);
             }
         }
@@ -195,8 +199,7 @@ void SurfaceDetection::processMessage(const MyPointcloud::ConstPtr& msg)
             // Transform and refine the plane with new inliers, searching in whole pointcloud
             if (surfaceType_ == 1) {
                 refinePlane(pcLastCloud_);
-            }
-            if (surfaceType_ == 2) {
+            } else if (surfaceType_ == 2) {
                 refineCylinder(pcLastCloud_);
             }
         }
@@ -289,8 +292,6 @@ void SurfaceDetection::findPlanes(boost::shared_ptr<MyPointcloud> cloud, unsigne
 
 #ifdef VISUALIZE
     // add pointcloud keyframe to the accumulated pointclouds depending on planar property
-//    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
-//    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_);
     pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_);
     *pcVisSurfaces_ = *pcVisSurfaces;
@@ -379,8 +380,8 @@ void SurfaceDetection::findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsig
 #ifdef VISUALIZE
     boost::shared_ptr<MyPointcloud> pcVisSurfaces = boost::make_shared<MyPointcloud>();
 #endif
-    MyNormalcloud::Ptr normalsFiltered  = boost::make_shared<MyNormalcloud>();
-    MyNormalcloud::Ptr normalsCropped = boost::make_shared<MyNormalcloud>();
+    boost::shared_ptr<MyNormalcloud> normalsFiltered  = boost::make_shared<MyNormalcloud>();
+    boost::shared_ptr<MyNormalcloud> normalsCropped = boost::make_shared<MyNormalcloud>();
 
     // Create normals
     pcl::NormalEstimation<MyPoint, MyNormal> ne;
@@ -417,8 +418,6 @@ void SurfaceDetection::findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsig
             ROS_WARN_STREAM ("Could not estimate a model for the given pointcloud data (" << coefficients->values.size() << " coefficients)");
             break;
         }
-
-
         // Extract the inliers/outliers
         extract.setInputCloud(pcCropped);
         extract.setIndices(inliers);
@@ -472,8 +471,6 @@ void SurfaceDetection::findCylinder(boost::shared_ptr<MyPointcloud> cloud, unsig
 
 #ifdef VISUALIZE
     // Add pointcloud keyframe to the accumulated pointclouds depending on planar property
-//    pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_ * sensorToMav_ * opticalToSensor_);
-//    pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_ * sensorToMav_ * opticalToSensor_);
     pcl::transformPointCloud(*pcVisSurfaces, *pcVisSurfaces, mavToWorld_);
     pcl::transformPointCloud(*pcCropped, *pcCropped, mavToWorld_);
     *pcVisSurfaces_ = *pcVisSurfaces;
@@ -657,16 +654,8 @@ void SurfaceDetection::publishPlane()
     tf.transform.rotation.w = plane_rot.w();
     tf.radius = 0.1f; // not used for planes
     pubTf_.publish(tf);
-
-    static tf::TransformBroadcaster br;
-    tf::Transform debugTf;
-    debugTf.setOrigin( tf::Vector3(intersection.x(), intersection.y(), intersection.z()) );
-    debugTf.setRotation( tf::Quaternion(plane_rot.x(), plane_rot.y(), plane_rot.z(), plane_rot.w()) );
-    br.sendTransform(tf::StampedTransform(debugTf, ros::Time::now(), mavTFName_, "debug/plane"));
-
     
     //visualization
-//    Plane::transformPlane(sensorToMav_ * opticalToSensor_, intersection, plane_normal);
     plane_rot = Eigen::Quaternionf::FromTwoVectors(Eigen::Vector3f(1,0,0), plane_normal);
 
     visualization_msgs::Marker marker;
@@ -697,7 +686,7 @@ void SurfaceDetection::publishCylinder()
     if (!cylinder_) { return; }
     // calculate cylinder position
     Eigen::VectorXf coefficients = cylinder_->getCoefficients(); // cylinder_->calculateNormalForm
-    Cylinder::transformCylinder(sensorToMav_ * opticalToSensor_, coefficients);
+//    Cylinder::transformCylinder(sensorToMav_ * opticalToSensor_, coefficients);
 
     Eigen::Vector3f cylinder_point = Eigen::Vector3f(coefficients[0], coefficients[1], coefficients[2]);
     Eigen::Vector3f cylinder_direction = Eigen::Vector3f(coefficients[3], coefficients[4], coefficients[5]);
@@ -730,7 +719,6 @@ void SurfaceDetection::publishCylinder()
         intersection = intersection2;
     }
 
-
     // publish
     surface_detection_msgs::Surface tf;
     tf.header.stamp = ros::Time::now();
@@ -744,7 +732,6 @@ void SurfaceDetection::publishCylinder()
     tf.transform.rotation.w = cylinder_rot.w();
     tf.radius = cylinder_radius;
     pubTf_.publish(tf);
-
 
     // visualize
     visualization_msgs::Marker marker;
@@ -769,24 +756,6 @@ void SurfaceDetection::publishCylinder()
     marker.color.a = 0.8;
     marker.lifetime = ros::Duration();
     pubCylinder_.publish(marker);
-}
-
-
-void SurfaceDetection::configCallback(te_surface_detection::generalConfig &config, uint32_t level)
-{
-    std::cout << "Configurating." << std::endl;
-
-    scaledDepthVarTH_ = pow(10.0f , config.scaledDepthVarTH );
-    absDepthVarTH_ = pow(10.0f, config.absDepthVarTH);
-    minNearSupport_ = config.minNearSupport;
-    sparsifyFactor_ = config.sparsifyFactor;
-    distanceThreshold_ = config.distanceThreshold;
-    windowSize_ = config.windowSize;
-    windowPosY_ = config.windowPosY;
-    // debug parameters
-    //minPointsForEstimation_ = config.minPointsForEstimation;
-    //noisePercentage_ = 1-config.planarPercentage;
-    //maxPlanesPerCloud_ = config.maxPlanesPerCloud;
 }
 
 
