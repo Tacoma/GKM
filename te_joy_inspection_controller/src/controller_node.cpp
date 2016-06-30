@@ -346,7 +346,9 @@ void Controller::testCylinders()
     Eigen::Vector3f proj_pos = mav_pos + (facing*(sticking_distance_ + cylinder_radius_) - normal.dot(mav_pos-cylinder_pos))*normal;
 
     /// set snapping goal tf
-    snap_goal_tf_.setOrigin(tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()));
+    float snapZ = cylinder_pos.z() + 0.25f;
+    snap_goal_tf_.setOrigin(tf::Vector3(proj_pos.x(), proj_pos.y(), snapZ));
+    //snap_goal_tf_.setOrigin(tf::Vector3(proj_pos.x(), proj_pos.y(), proj_pos.z()));
     snap_goal_tf_.setRotation(surface_tf_.getRotation());
 
     // rviz debug
